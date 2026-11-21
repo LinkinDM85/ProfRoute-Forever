@@ -35,9 +35,15 @@ end
 -- Подписаться на обновление содержимого сумок (вызывает callback)
 function B.Watch(callback)
     local f = CreateFrame("Frame")
-    f:RegisterEvent("BAG_UPDATE_DELAYED")
-    f:RegisterEvent("PLAYERREAGENTBANKSLOTS_CHANGED")
-    f:RegisterEvent("BANKFRAME_OPENED")
+    -- На Forever части классических/современных событий может не быть
+    -- (нет реагентного банка и т.п.) — регистрируем безопасно, через pcall
+    for _, event in ipairs({
+        "BAG_UPDATE_DELAYED",
+        "BANKFRAME_OPENED",
+        "PLAYERBANKSLOTS_CHANGED",
+    }) do
+        pcall(f.RegisterEvent, f, event)
+    end
     f:SetScript("OnEvent", function()
         -- небольшая задержка, чтобы дать клиенту обновить кэши
         C_Timer.After(0.1, function()

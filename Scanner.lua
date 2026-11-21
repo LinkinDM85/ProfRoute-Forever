@@ -181,10 +181,16 @@ end
 -- События и тикер
 -- ---------------------------------------------------------------------------
 local ev = CreateFrame("Frame")
-ev:RegisterEvent("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED")
-ev:RegisterEvent("AUCTION_HOUSE_BROWSE_RESULTS_ADDED")
-ev:RegisterEvent("AUCTION_HOUSE_BROWSE_FAILURE")
-ev:RegisterEvent("AUCTION_HOUSE_CLOSED")
+-- регистрируем безопасно: если события нет в конкретном билде Forever,
+-- pcall проглотит ошибку, а остальные события продолжат работать
+for _, event in ipairs({
+    "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED",
+    "AUCTION_HOUSE_BROWSE_RESULTS_ADDED",
+    "AUCTION_HOUSE_BROWSE_FAILURE",
+    "AUCTION_HOUSE_CLOSED",
+}) do
+    pcall(ev.RegisterEvent, ev, event)
+end
 ev:SetScript("OnEvent", function(_, event)
     if event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"
         or event == "AUCTION_HOUSE_BROWSE_RESULTS_ADDED" then
