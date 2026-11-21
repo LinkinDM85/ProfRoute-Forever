@@ -416,7 +416,7 @@ local function BuildDropdown(parent)
     dropdown.arrow:SetText("▼")
     dropdown.arrow:SetTextColor(unpack(C.textDim))
 
-    dropdownPopup = CreateFrame("Frame", nil, dropdown, "BackdropTemplateMixin")
+    dropdownPopup = CreateFrame("Frame", nil, dropdown)
     dropdownPopup:SetFrameStrata("TOOLTIP")
     dropdownPopup:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
     dropdownPopup:SetWidth(210)
@@ -459,7 +459,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local function CreateMainFrame()
-    f = CreateFrame("Frame", "ProfRouteFrame", UIParent, "BackdropTemplateMixin")
+    f = CreateFrame("Frame", "ProfRouteFrame", UIParent)
     f:SetSize(FRAME_W, FRAME_H)
     f:SetPoint("CENTER")
     f:SetMovable(true)
