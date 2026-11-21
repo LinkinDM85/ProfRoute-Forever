@@ -312,10 +312,27 @@ function PR.RecipeName(r)
     return r.name or ("Предмет #" .. tostring(r.item))
 end
 
-function PR.RecipeIcon(r)
-    if r.item then
-        local _, _, _, _, icon = GetItemInfoInstant(r.item)
-        if icon then return icon end
+-- Иконка предмета: на разных билдах API отличается (глобальная
+-- GetItemInfoInstant убрана из современного клиента, C_Item.GetItemInfoInstant
+-- где-то возвращает значения, где-то таблицу) — пробуем все варианты
+function PR.ItemIcon(itemID)
+    if not itemID then return nil end
+    if C_Item and C_Item.GetItemInfoInstant then
+        local ok, _, _, _, _, icon = pcall(C_Item.GetItemInfoInstant, itemID)
+        if ok and icon then return icon end
+        local ok2, info = pcall(C_Item.GetItemInfoInstant, itemID)
+        if ok2 and type(info) == "table" then
+            return info.iconFileID or info.icon
+        end
     end
-    return 134940 -- нейтральная иконка-свиток
+    if GetItemInfoInstant then
+        local _, _, _, _, icon = GetItemInfoInstant(itemID)
+        return icon
+    end
+    return nil
+end
+
+function PR.RecipeIcon(r)
+    local icon = r.item and PR.ItemIcon(r.item)
+    return icon or 134940 -- нейтральная иконка-свиток
 end

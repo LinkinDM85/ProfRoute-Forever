@@ -331,8 +331,7 @@ function UI.RefreshShopping()
         local row = AcquireRow(list, i)
         row:Show()
 
-        local _, _, _, _, icon = GetItemInfoInstant(it.itemID)
-        row.icon:SetTexture(icon or 134400)
+        row.icon:SetTexture(PR.ItemIcon(it.itemID) or 134400)
 
         local name = C_Item and C_Item.GetItemNameByID
             and C_Item.GetItemNameByID(it.itemID)

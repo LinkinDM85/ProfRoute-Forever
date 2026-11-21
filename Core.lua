@@ -9,7 +9,7 @@ local ADDON_NAME = ...
 ProfRoute = {}
 local PR = ProfRoute
 
-PR.VERSION = "1.0.2"
+PR.VERSION = "1.0.3"
 
 -- Цвета оформления (единая палитра, используется в UI)
 PR.COLORS = {
