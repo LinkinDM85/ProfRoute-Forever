@@ -8,6 +8,8 @@
 ## SavedVariables: ProfRouteDB
 ## OptionalDeps: Auctionator, TradeSkillMaster
 ## X-Game: Camelot
+## X-Website: https://github.com/LinkinDM85/ProfRoute-Forever
+## X-Donate: https://boosty.to/linkindm/donate
 ## AllowLoadGameType: forever
 ## ExcludeLoadGameType: standard, classic
 
