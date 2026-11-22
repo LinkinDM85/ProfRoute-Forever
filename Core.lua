@@ -9,7 +9,7 @@ local ADDON_NAME = ...
 ProfRoute = {}
 local PR = ProfRoute
 
-PR.VERSION = "1.0.3"
+PR.VERSION = "1.0.4"
 
 -- Цвета оформления (единая палитра, используется в UI)
 PR.COLORS = {
@@ -155,6 +155,10 @@ SlashCmdList.PROFROUTE = function(msg)
             PR.Scanner.StartForPlan()
         else
             PR.Print("сканер недоступен.")
+        end
+    elseif msg == "minimap" then
+        if PR.ToggleMinimapButton then
+            PR.ToggleMinimapButton()
         end
     elseif msg == "reset" then
         ProfRouteDB.prices = {}
