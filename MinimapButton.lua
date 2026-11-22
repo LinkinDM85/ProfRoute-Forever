@@ -64,10 +64,10 @@ local function CreateButton()
     b:SetScript("OnEnter", function(self)
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine("|cff4da3ffProfRoute|r")
-        GameTooltip:AddLine("ЛКМ — открыть/закрыть окно", 1, 1, 1)
-        GameTooltip:AddLine("Перетаскивание ЛКМ — переместить кнопку", 0.62, 0.62, 0.72)
-        GameTooltip:AddLine("/proute minimap — скрыть кнопку", 0.62, 0.62, 0.72)
+        GameTooltip:AddLine(PR.L("MM_TITLE"))
+        GameTooltip:AddLine(PR.L("MM_L1"), 1, 1, 1)
+        GameTooltip:AddLine(PR.L("MM_L2"), 0.62, 0.62, 0.72)
+        GameTooltip:AddLine(PR.L("MM_L3"), 0.62, 0.62, 0.72)
         GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function()
@@ -84,7 +84,7 @@ function PR.ToggleMinimapButton()
     if PR.MinimapButton then
         PR.MinimapButton:SetShown(not PR.db.minimap.hide)
     end
-    PR.Print("кнопка у миникарты: " .. (PR.db.minimap.hide and "скрыта" or "показана"))
+    PR.Print(PR.L(PR.db.minimap.hide and "MM_STATE_HIDDEN" or "MM_STATE_SHOWN"))
 end
 
 -- создаём после входа в мир (к этому моменту SavedVariables уже загружены)

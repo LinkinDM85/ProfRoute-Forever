@@ -9,7 +9,7 @@ local ADDON_NAME = ...
 ProfRoute = {}
 local PR = ProfRoute
 
-PR.VERSION = "1.0.4"
+PR.VERSION = "1.1.0"
 
 -- Цвета оформления (единая палитра, используется в UI)
 PR.COLORS = {
@@ -42,7 +42,33 @@ local DEFAULTS = {
     scanTimeoutMin = 120, -- через сколько минут цены считаются устаревшими
     lastProfession = nil,
     framePos = nil,       -- { point, x, y }
+    locale = "auto",      -- "auto" | "ruRU" | "enUS"
 }
+
+-- ---------------------------------------------------------------------------
+-- Локализация
+-- Файлы Locales\*.lua заполняют PR.Locales. PR.L — прокси: строки
+-- разрешаются в момент обращения, поэтому смена языка подхватывается
+-- автоматически. Приоритет: выбранный язык -> английский -> сам ключ.
+-- ---------------------------------------------------------------------------
+PR.Locales = {}
+
+function PR.CurrentLocale()
+    local l = PR.db and PR.db.locale or "auto"
+    if l == "ruRU" or l == "enUS" then return l end
+    local client = GetLocale and GetLocale() or "ruRU"
+    return (client == "ruRU") and "ruRU" or "enUS"
+end
+
+PR.L = setmetatable({}, {
+    __index = function(_, k)
+        local cur = PR.Locales[PR.CurrentLocale()]
+        local v = cur and cur[k]
+        if v == nil and PR.Locales.enUS then v = PR.Locales.enUS[k] end
+        if v == nil then v = k end
+        return v
+    end,
+})
 
 -- ---------------------------------------------------------------------------
 -- Служебные функции
@@ -50,27 +76,29 @@ local DEFAULTS = {
 
 -- Форматирование денег: 123456 -> "12г 34с 56м"
 function PR.FormatMoney(copper)
-    if not copper then return "|cff8c8c8cнет данных|r" end
+    local L = PR.L
+    if not copper then return L("MONEY_UNKNOWN") end
     copper = math.floor(copper + 0.5)
     local g = math.floor(copper / 10000)
     local s = math.floor((copper % 10000) / 100)
     local c = copper % 100
     if g > 0 then
-        return string.format("|cffffd700%d|r|cffffffffг|r |cffc7c7cf%d|r|cffffffffс|r", g, s)
+        return string.format("|cffffd700%d|r|cffffffff%s|r |cffc7c7cf%d|r|cffffffff%s|r", g, L("MONEY_G"), s, L("MONEY_S"))
     elseif s > 0 then
-        return string.format("|cffc7c7cf%d|r|cffffffffс|r |cffeda55f%d|r|cffffffffм|r", s, c)
+        return string.format("|cffc7c7cf%d|r|cffffffff%s|r |cffeda55f%d|r|cffffffff%s|r", s, L("MONEY_S"), c, L("MONEY_C"))
     end
-    return string.format("|cffeda55f%d|r|cffffffffм|r", c)
+    return string.format("|cffeda55f%d|r|cffffffff%s|r", c, L("MONEY_C"))
 end
 
 function PR.FormatMoneyShort(copper)
     if not copper then return "--" end
+    local L = PR.L
     copper = math.floor(copper + 0.5)
     local g = math.floor(copper / 10000)
     if g > 0 then
-        return string.format("%.1fг", copper / 10000)
+        return string.format("%.1f%s", copper / 10000, L("MONEY_G"))
     end
-    return string.format("%dс", math.floor((copper % 10000) / 100))
+    return string.format("%d%s", math.floor((copper % 10000) / 100), L("MONEY_S"))
 end
 
 -- Сообщение в чат
@@ -135,9 +163,9 @@ frame:SetScript("OnEvent", function(_, event, arg1)
         if PR.PrecacheItems then PR.PrecacheItems() end
 
     elseif event == "PLAYER_LOGIN" then
-        PR.Print("загружен. Открыть окно: |cffffffff/proute|r")
+        PR.Print(PR.L("MSG_LOADED"))
         if C_Item and C_Item.GetItemCount == nil then
-            PR.Print("|cffff8080внимание:|r нестандартное API клиента, проверьте работу на текущем билде.")
+            PR.Print(PR.L("MSG_API_WARNING"))
         end
     end
 end)
@@ -154,7 +182,7 @@ SlashCmdList.PROFROUTE = function(msg)
         if PR.Scanner and PR.Scanner.StartForPlan then
             PR.Scanner.StartForPlan()
         else
-            PR.Print("сканер недоступен.")
+            PR.Print(PR.L("SCAN_NO_SUPPORT"))
         end
     elseif msg == "minimap" then
         if PR.ToggleMinimapButton then
@@ -162,7 +190,7 @@ SlashCmdList.PROFROUTE = function(msg)
         end
     elseif msg == "reset" then
         ProfRouteDB.prices = {}
-        PR.Print("база цен очищена.")
+        PR.Print(PR.L("MSG_RESET_DONE"))
     else
         if PR.UI and PR.UI.Toggle then PR.UI.Toggle() end
     end

@@ -87,5 +87,5 @@ function PR.PriceSourceLabel()
     elseif TSM_API then
         return "TSM"
     end
-    return "свой сканер"
+    return PR.L("SRC_SCANNER")
 end

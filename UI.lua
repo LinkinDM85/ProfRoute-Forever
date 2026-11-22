@@ -11,6 +11,9 @@ local UI = PR.UI
 
 local C = PR.COLORS
 
+-- Локализация: функция-обёртка, чтобы смена языка подхватывалась в рантайме
+local function L(key) return PR.L[key] end
+
 local FRAME_W, FRAME_H = 820, 560
 local ROW_H = 34
 
@@ -220,8 +223,7 @@ end
 
 local function ProfDisplayName(key)
     local p = PR.Professions[key]
-    local locale = GetLocale and GetLocale() or "ruRU"
-    if locale == "ruRU" then return p.names.ru end
+    if PR.CurrentLocale() == "ruRU" then return p.names.ru end
     return p.names.en
 end
 
@@ -269,9 +271,9 @@ function UI.RefreshPlan()
     if not plan or not plan.possible or #steps == 0 then
         f.planEmpty:Show()
         if plan and not plan.possible then
-            f.planEmpty:SetText("Не удалось построить маршрут:\nв базе нет рецептов для выбранного диапазона навыка.")
+            f.planEmpty:SetText(L("UI_PLAN_IMPOSSIBLE"))
         else
-            f.planEmpty:SetText("Выберите профессию и нажмите «Построить план».")
+            f.planEmpty:SetText(L("UI_PLAN_EMPTY"))
         end
         f.planTotal:SetText("")
         return
@@ -287,14 +289,13 @@ function UI.RefreshPlan()
         row.name:SetText(PR.RecipeName(r))
 
         local col = PR.Planner.DifficultyColor(r, step.from)
-        row.sub:SetText(string.format("навык %d → %d   ·   создать ×%d",
-            step.from, step.to, step.crafts))
+        row.sub:SetText(string.format(L("UI_STEP_FMT"), step.from, step.to, step.crafts))
         row.sub:SetTextColor(unpack(col))
 
         local costText = PR.FormatMoney(step.cost)
         if step.unknown then costText = costText .. " |cffff8040*|r" end
         row.right:SetText(costText)
-        row.right2:SetText(string.format("за шт: %s", PR.FormatMoneyShort(
+        row.right2:SetText(string.format(L("UI_PER_ITEM"), PR.FormatMoneyShort(
             PR.Planner.CraftCost(r))))
 
         if r.item then HookRowTooltip(row, r.item) end
@@ -304,9 +305,8 @@ function UI.RefreshPlan()
 
     -- итог
     local total = PR.FormatMoney(plan.totalCost)
-    local note = plan.hasUnknown and
-        "   |cffff8040* часть цен неизвестна — запустите сканирование|r" or ""
-    f.planTotal:SetText("Ожидаемая стоимость: " .. total .. note)
+    local note = plan.hasUnknown and L("UI_UNKNOWN_NOTE") or ""
+    f.planTotal:SetText(L("UI_TOTAL_COST") .. total .. note)
 end
 
 -- ---------------------------------------------------------------------------
@@ -339,16 +339,16 @@ function UI.RefreshShopping()
         row.name:SetText(name)
 
         if it.buy > 0 then
-            row.sub:SetText(string.format("нужно %d · есть %d", it.need, it.have))
+            row.sub:SetText(string.format(L("UI_NEED_FMT"), it.need, it.have))
             row.sub:SetTextColor(unpack(C.textDim))
-            row.right:SetText(string.format("|cffff6a5fкупить ×%d|r", it.buy))
+            row.right:SetText(string.format(L("UI_BUY_FMT"), it.buy))
             local sub = PR.FormatMoney(it.subtotal)
-            if it.stale then sub = sub .. " |cffff8040(устар.)|r" end
+            if it.stale then sub = sub .. L("UI_STALE") end
             row.right2:SetText(sub)
         else
-            row.sub:SetText(string.format("нужно %d · есть %d", it.need, it.have))
+            row.sub:SetText(string.format(L("UI_NEED_FMT"), it.need, it.have))
             row.sub:SetTextColor(unpack(C.textDim))
-            row.right:SetText("|cff59e673хватает|r")
+            row.right:SetText(L("UI_HAVE_ENOUGH"))
             row.right2:SetText("")
         end
 
@@ -357,7 +357,7 @@ function UI.RefreshShopping()
     list.content:SetHeight(#shopping * ROW_H)
     list.UpdateScrollRange()
 
-    f.shopTotal:SetText("К закупке: " .. PR.FormatMoney(plan.shoppingTotal))
+    f.shopTotal:SetText(L("UI_TOTAL_BUY") .. PR.FormatMoney(plan.shoppingTotal))
 end
 
 -- ---------------------------------------------------------------------------
@@ -368,10 +368,9 @@ function UI.RefreshScanStatus()
     if not f or not f:IsShown() then return end
     local S = PR.Scanner
     if S.active then
-        f.status:SetText(string.format(
-            "|cffffd700Сканирование аукциона: %d/%d...|r", S.done, S.total))
+        f.status:SetText(string.format(L("UI_STATUS_SCANNING"), S.done, S.total))
     else
-        f.status:SetText("Источник цен: |cffffffff" .. PR.PriceSourceLabel() .. "|r")
+        f.status:SetText(string.format(L("UI_STATUS_SOURCE"), PR.PriceSourceLabel()))
     end
 end
 
@@ -409,7 +408,7 @@ local function BuildDropdown(parent)
     dropdown.text:SetPoint("LEFT", 8, 0)
     dropdown.text:SetPoint("RIGHT", -20, 0)
     dropdown.text:SetJustifyH("LEFT")
-    dropdown.text:SetText("Выберите профессию")
+    dropdown.text:SetText(L("UI_SELECT_PROF"))
     dropdown.arrow = MakeText(dropdown)
     dropdown.arrow:SetPoint("RIGHT", -6, 0)
     dropdown.arrow:SetText("▼")
@@ -491,11 +490,15 @@ local function CreateMainFrame()
 
     local title = MakeText(titleBar, GameFontHighlightLarge)
     title:SetPoint("LEFT", 12, 0)
-    title:SetText("|cff4da3ffProfRoute|r  |cff8c96b0— маршрут прокачки профессий|r")
+    title:SetText(L("UI_TITLE"))
 
     local close = MakeButton(titleBar, 24, 20, "✕")
     close:SetPoint("RIGHT", -6, 0)
     close:SetScript("OnClick", function() f:Hide() end)
+
+    local gear = MakeButton(titleBar, 24, 20, "⚙")
+    gear:SetPoint("RIGHT", close, "LEFT", -4, 0)
+    gear:SetScript("OnClick", function(self) UI.ToggleSettings(self) end)
 
     -- панель управления
     local ctrl = CreateFrame("Frame", nil, f)
@@ -505,26 +508,26 @@ local function CreateMainFrame()
 
     local ddLabel = MakeText(ctrl, GameFontDisableSmall)
     ddLabel:SetPoint("TOPLEFT", 12, 0)
-    ddLabel:SetText("Профессия")
+    ddLabel:SetText(L("UI_PROFESSION"))
     ddLabel:SetTextColor(unpack(C.textDim))
 
     local dd = BuildDropdown(ctrl)
     dd:SetPoint("TOPLEFT", 12, -14)
 
-    local skillWrap, skillBox = MakeEditBox(ctrl, 60, "Текущий навык")
+    local skillWrap, skillBox = MakeEditBox(ctrl, 60, L("UI_CURRENT_SKILL"))
     skillWrap:SetPoint("LEFT", dd, "RIGHT", 18, 0)
     f.skillBox = skillBox
 
-    local tgtWrap, tgtBox = MakeEditBox(ctrl, 60, "Цель")
+    local tgtWrap, tgtBox = MakeEditBox(ctrl, 60, L("UI_TARGET"))
     tgtWrap:SetPoint("LEFT", skillWrap, "RIGHT", 18, 0)
     f.targetBox = tgtBox
     tgtBox:SetText(tostring(PR.db.targetSkill or 300))
 
-    local build = MakeButton(ctrl, 130, 24, "Построить план", true)
+    local build = MakeButton(ctrl, 130, 24, L("UI_BUILD"), true)
     build:SetPoint("LEFT", tgtWrap, "RIGHT", 18, 0)
     build:SetScript("OnClick", RebuildPlan)
 
-    local scan = MakeButton(ctrl, 150, 24, "Сканировать цены")
+    local scan = MakeButton(ctrl, 150, 24, L("UI_SCAN"))
     scan:SetPoint("LEFT", build, "RIGHT", 12, 0)
     scan:SetScript("OnClick", function() PR.Scanner.StartForPlan() end)
     f.scanButton = scan
@@ -532,7 +535,7 @@ local function CreateMainFrame()
     -- левая панель: маршрут
     local leftHeader = MakeText(f, GameFontHighlight)
     leftHeader:SetPoint("TOPLEFT", ctrl, "BOTTOMLEFT", 12, -10)
-    leftHeader:SetText("МАРШРУТ")
+    leftHeader:SetText(L("UI_ROUTE"))
     leftHeader:SetTextColor(unpack(C.accent))
 
     f.planList = MakeScrollList(f)
@@ -551,7 +554,7 @@ local function CreateMainFrame()
     local rightHeader = MakeText(f, GameFontHighlight)
     rightHeader:SetPoint("TOPLEFT", f, "TOPLEFT", FRAME_W / 2 + 8, 0)
     rightHeader:SetPoint("TOP", leftHeader, "TOP", 0, 0)
-    rightHeader:SetText("ЧТО ДОКУПИТЬ")
+    rightHeader:SetText(L("UI_SHOPPING"))
     rightHeader:SetTextColor(unpack(C.accent))
 
     f.shopList = MakeScrollList(f)
@@ -561,7 +564,7 @@ local function CreateMainFrame()
     f.shopEmpty = MakeText(f.shopList.holder)
     f.shopEmpty:SetPoint("CENTER")
     f.shopEmpty:SetWidth(FRAME_W / 2 - 60)
-    f.shopEmpty:SetText("Список появится после построения плана.")
+    f.shopEmpty:SetText(L("UI_SHOP_EMPTY"))
     f.shopEmpty:SetTextColor(unpack(C.textDim))
 
     f.shopTotal = MakeText(f, GameFontHighlight)
@@ -580,7 +583,7 @@ local function CreateMainFrame()
 
     local hint = MakeText(statusBar, GameFontDisableSmall)
     hint:SetPoint("RIGHT", -10, 0)
-    hint:SetText("/proute — открыть · сканер работает при открытом аукционе")
+    hint:SetText(L("UI_HINT"))
     hint:SetTextColor(unpack(C.textDim))
 
     -- отслеживаем изменения в сумках: обновляем "есть/купить"
@@ -598,6 +601,102 @@ local function CreateMainFrame()
             SelectProfession(PR.db.lastProfession)
         end
     end)
+end
+
+-- ---------------------------------------------------------------------------
+-- Окно настроек (шестерёнка в заголовке)
+-- ---------------------------------------------------------------------------
+
+local settingsPopup
+
+local function ApplyLocale(value)
+    if PR.db.locale == value then return end
+    PR.db.locale = value
+    PR.Print(PR.L("MSG_LOCALE_RELOAD"))
+    -- статичные надписи создаются при построении окна — проще перезагрузить UI
+    C_Timer.After(0.5, function()
+        if C_UI and C_UI.Reload then C_UI.Reload() else ReloadUI() end
+    end)
+end
+
+local function BuildSettingsPopup()
+    local p = CreateFrame("Frame", nil, f)
+    p:SetSize(280, 170)
+    p:SetFrameStrata("TOOLTIP")
+    SetFlatBackdrop(p, C.bg, C.border)
+
+    local title = MakeText(p, GameFontHighlight)
+    title:SetPoint("TOPLEFT", 12, -10)
+    title:SetText(L("UI_SETTINGS"))
+    title:SetTextColor(unpack(C.accent))
+
+    local langLabel = MakeText(p, GameFontDisableSmall)
+    langLabel:SetPoint("TOPLEFT", 12, -34)
+    langLabel:SetText(L("UI_LANGUAGE"))
+    langLabel:SetTextColor(unpack(C.textDim))
+
+    -- кнопки выбора языка
+    p.langButtons = {}
+    local langs = {
+        { value = "auto", label = L("UI_LANG_AUTO") },
+        { value = "ruRU", label = "Русский" },
+        { value = "enUS", label = "English" },
+    }
+    local x = 12
+    for _, entry in ipairs(langs) do
+        local b = MakeButton(p, 84, 22, entry.label)
+        b:SetPoint("TOPLEFT", x, -52)
+        b:SetScript("OnClick", function() ApplyLocale(entry.value) end)
+        b.langValue = entry.value
+        b.langLabel = entry.label
+        table.insert(p.langButtons, b)
+        x = x + 88
+    end
+
+    -- чекбокс «учитывать банк»
+    local cb = CreateFrame("Button", nil, p)
+    cb:SetSize(18, 18)
+    cb:SetPoint("TOPLEFT", 12, -92)
+    SetFlatBackdrop(cb, C.bgLight, C.borderDim)
+    cb.mark = MakeText(cb)
+    cb.mark:SetPoint("CENTER")
+    cb.mark:SetText("✓")
+    cb.mark:SetTextColor(unpack(C.green))
+    cb:SetScript("OnClick", function()
+        PR.db.useBank = not PR.db.useBank
+        UI.RefreshSettings()
+        if PR.state.plan then RebuildPlan() end
+    end)
+    p.bankCheckbox = cb
+
+    local cbLabel = MakeText(p, GameFontHighlightSmall)
+    cbLabel:SetPoint("LEFT", cb, "RIGHT", 8, 0)
+    cbLabel:SetText(L("UI_USE_BANK"))
+    p.bankLabel = cbLabel
+
+    return p
+end
+
+function UI.RefreshSettings()
+    if not settingsPopup then return end
+    for _, b in ipairs(settingsPopup.langButtons) do
+        local active = (PR.db.locale or "auto") == b.langValue
+        b.text:SetText((active and "|cff59e673" or "|cffffffff") .. b.langLabel .. "|r")
+    end
+    settingsPopup.bankCheckbox.mark:SetShown(PR.db.useBank ~= false)
+end
+
+function UI.ToggleSettings(anchor)
+    if settingsPopup and settingsPopup:IsShown() then
+        settingsPopup:Hide()
+        return
+    end
+    if not settingsPopup then
+        settingsPopup = BuildSettingsPopup()
+        settingsPopup:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
+    end
+    UI.RefreshSettings()
+    settingsPopup:Show()
 end
 
 -- ---------------------------------------------------------------------------

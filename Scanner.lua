@@ -58,17 +58,17 @@ end
 -- Собрать все реагенты выбранной профессии и начать сканирование
 function S.StartForPlan()
     if not S.IsSupported() then
-        PR.Print("сканер не поддерживается этим клиентом (нет C_AuctionHouse).")
+        PR.Print(PR.L("SCAN_NO_SUPPORT"))
         return
     end
     if not AtAuctionHouse() then
-        PR.Print("откройте окно аукциона, затем запустите сканирование ещё раз.")
+        PR.Print(PR.L("SCAN_OPEN_AH"))
         return
     end
 
     local key = PR.state.profession
     if not key then
-        PR.Print("сначала выберите профессию в окне ProfRoute (/proute).")
+        PR.Print(PR.L("SCAN_SELECT_PROF"))
         return
     end
 
@@ -91,7 +91,7 @@ function S.StartForPlan()
     S.Enqueue(ids)
     S.active = true
     S.waiting = false
-    PR.Print("сканирование: %d позиций. Не закрывайте окно аукциона.", #S.queue)
+    PR.Print(PR.L("SCAN_START"), #S.queue)
     if PR.UI and PR.UI.RefreshScanStatus then PR.UI.RefreshScanStatus() end
 end
 
@@ -102,7 +102,7 @@ local function SendNext()
     local itemID = table.remove(S.queue, 1)
     if not itemID then
         S.active = false
-        PR.Print("сканирование завершено: %d из %d позиций найдено на аукционе.", S.found, S.done)
+        PR.Print(PR.L("SCAN_DONE"), S.found, S.done)
         if PR.UI then
             if PR.UI.RefreshScanStatus then PR.UI.RefreshScanStatus() end
             if PR.UI.RefreshAll then PR.UI.RefreshAll() end
@@ -128,7 +128,7 @@ local function SendNext()
     if not ok then
         S.waiting = false
         S.done = S.done + 1
-        PR.Print("запрос #%d не отправлен (%s).", S.done, tostring(err))
+        PR.Print(PR.L("SCAN_QUERY_FAIL"), S.done, tostring(err))
     end
 end
 
@@ -202,7 +202,7 @@ ev:SetScript("OnEvent", function(_, event)
         if S.active then
             S.active = false
             S.queue = {}
-            PR.Print("окно аукциона закрыто — сканирование остановлено.")
+            PR.Print(PR.L("SCAN_ABORTED"))
         end
     end
 end)

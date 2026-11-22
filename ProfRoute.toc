@@ -4,7 +4,7 @@
 ## Notes: Строит самый дешёвый маршрут прокачки профессии по ценам аукциона, считает, что есть в сумках, и показывает список покупок.
 ## Notes-ruRU: Строит самый дешёвый маршрут прокачки профессии по ценам аукциона, считает, что есть в сумках, и показывает список покупок.
 ## Author: ProfRoute Dev
-## Version: 1.0.4
+## Version: 1.1.0
 ## SavedVariables: ProfRouteDB
 ## OptionalDeps: Auctionator, TradeSkillMaster
 ## X-Game: Camelot
@@ -14,6 +14,8 @@
 ## ExcludeLoadGameType: standard, classic
 
 Core.lua
+Locales\ruRU.lua
+Locales\enUS.lua
 Data\Recipes.lua
 Prices.lua
 Scanner.lua
