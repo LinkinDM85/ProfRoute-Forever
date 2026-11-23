@@ -9,7 +9,7 @@ local ADDON_NAME = ...
 ProfRoute = {}
 local PR = ProfRoute
 
-PR.VERSION = "1.1.0"
+PR.VERSION = "1.1.1"
 
 -- Цвета оформления (единая палитра, используется в UI)
 PR.COLORS = {
@@ -60,14 +60,18 @@ function PR.CurrentLocale()
     return (client == "ruRU") and "ruRU" or "enUS"
 end
 
+local function ResolveLocale(k)
+    local cur = PR.Locales[PR.CurrentLocale()]
+    local v = cur and cur[k]
+    if v == nil and PR.Locales.enUS then v = PR.Locales.enUS[k] end
+    if v == nil then v = k end
+    return v
+end
+
+-- __index: PR.L["KEY"] · __call: PR.L("KEY") — работают оба варианта
 PR.L = setmetatable({}, {
-    __index = function(_, k)
-        local cur = PR.Locales[PR.CurrentLocale()]
-        local v = cur and cur[k]
-        if v == nil and PR.Locales.enUS then v = PR.Locales.enUS[k] end
-        if v == nil then v = k end
-        return v
-    end,
+    __index = function(_, k) return ResolveLocale(k) end,
+    __call = function(_, k) return ResolveLocale(k) end,
 })
 
 -- ---------------------------------------------------------------------------
