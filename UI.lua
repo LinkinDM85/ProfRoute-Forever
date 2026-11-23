@@ -357,9 +357,11 @@ local function RebuildPlan()
     PR.state.plan = plan
     if plan and plan.possible then
         plan.shopping, plan.shoppingTotal = PR.Planner.BuildShoppingList(plan)
+        plan.suggestions = PR.Planner.SuggestRecipes(key, cur, tgt, plan)
     else
         plan = plan or { steps = {} }
         plan.shopping = {}
+        plan.suggestions = {}
     end
 
     -- выбранный шаг мог исчезнуть из нового плана
@@ -523,50 +525,94 @@ function UI.RefreshShopping()
     local list = f.shopList
     local plan = PR.state.plan
     local shopping = (plan and plan.shopping) or {}
+    local suggestions = (plan and plan.suggestions) or {}
+
+    -- объединённый список: сначала выгодные рецепты, потом обычные покупки
+    local items = {}
+    for _, sg in ipairs(suggestions) do
+        table.insert(items, { sugg = sg })
+    end
+    for _, it in ipairs(shopping) do
+        table.insert(items, { buy = it })
+    end
 
     for i, row in ipairs(list.rows) do row:Hide() end
 
-    if #shopping == 0 then
+    if #items == 0 then
         f.shopEmpty:Show()
         f.totalsBuy:SetText("")
         return
     end
     f.shopEmpty:Hide()
 
-    for i, it in ipairs(shopping) do
+    local locale = (GetLocale and GetLocale()) or "enUS"
+    local lang = (locale == "ruRU") and "ru" or "en"
+
+    for i, it in ipairs(items) do
         local row = AcquireRow(list, i)
         row:Show()
         row.step = nil
-        row.itemID = it.itemID -- Shift+клик: искать на аукционе
         row.sel:Hide()
 
-        row.icon:SetTexture(PR.ItemIcon(it.itemID) or 134400)
+        if it.sugg then
+            local sg = it.sugg
+            local cand = sg.cand
+            row.itemID = cand.item -- Shift+клик: искать свиток на аукционе
 
-        local name = C_Item and C_Item.GetItemNameByID
-            and C_Item.GetItemNameByID(it.itemID)
-            or ("Item #" .. it.itemID)
-        row.name:SetText(name)
+            row.icon:SetTexture(PR.ItemIcon(cand.item) or 134400)
+            row.name:SetText("|cffffd700" .. (cand.name[lang] or cand.name.en) .. "|r")
 
-        row.sub:SetText(string.format(L("UI_NEED_FMT"), it.need, it.have))
-        if it.have >= it.need then
+            -- выгода (экономия минус цена рецепта уже учтена в savings —
+            -- здесь показываем итоговую выгоду и цену свитка отдельно)
+            local sub = L("UI_SUGG_SAVINGS") .. PR.FormatMoney(sg.savings)
+            if not cand.verified then
+                sub = sub .. "  |cffffb347" .. L("UI_UNVERIFIED") .. "|r"
+            end
+            row.sub:SetText(sub)
             row.sub:SetTextColor(unpack(C.green))
-        else
-            row.sub:SetTextColor(unpack(C.textDim))
-        end
 
-        if it.buy > 0 then
-            row.right:SetText(string.format(L("UI_BUY_FMT"), it.buy))
-            local sub = PR.FormatMoney(it.subtotal)
-            if it.stale then sub = sub .. L("UI_STALE") end
-            row.right2:SetText(sub)
-        else
-            row.right:SetText(L("UI_HAVE_ENOUGH"))
+            local price = PR.FormatMoney(sg.price)
+            if sg.source == "vendor" then
+                price = price .. " (" .. L("UI_SUGG_VENDOR") .. ")"
+            else
+                price = price .. " (" .. L("UI_SUGG_AH") .. ")"
+            end
+            row.right:SetText(price)
             row.right2:SetText("")
-        end
 
-        HookItemTooltip(row, it.itemID)
+            HookItemTooltip(row, cand.item)
+        else
+            local b = it.buy
+            row.itemID = b.itemID -- Shift+клик: искать на аукционе
+
+            row.icon:SetTexture(PR.ItemIcon(b.itemID) or 134400)
+
+            local name = C_Item and C_Item.GetItemNameByID
+                and C_Item.GetItemNameByID(b.itemID)
+                or ("Item #" .. b.itemID)
+            row.name:SetText(name)
+
+            row.sub:SetText(string.format(L("UI_NEED_FMT"), b.need, b.have))
+            if b.have >= b.need then
+                row.sub:SetTextColor(unpack(C.green))
+            else
+                row.sub:SetTextColor(unpack(C.textDim))
+            end
+
+            if b.buy > 0 then
+                row.right:SetText(string.format(L("UI_BUY_FMT"), b.buy))
+                local sub = PR.FormatMoney(b.subtotal)
+                if b.stale then sub = sub .. L("UI_STALE") end
+                row.right2:SetText(sub)
+            else
+                row.right:SetText(L("UI_HAVE_ENOUGH"))
+                row.right2:SetText("")
+            end
+
+            HookItemTooltip(row, b.itemID)
+        end
     end
-    list.content:SetHeight(#shopping * ROW_H)
+    list.content:SetHeight(#items * ROW_H)
     list.UpdateScrollRange()
 
     f.totalsBuy:SetText(L("UI_TOTAL_BUY") .. PR.FormatMoney(plan.shoppingTotal))

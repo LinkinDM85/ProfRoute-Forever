@@ -175,6 +175,65 @@ function P.BuildPlan(profKey, fromSkill, toSkill)
 end
 
 -- ---------------------------------------------------------------------------
+-- Сканер выгодных рецептов.
+-- Для каждого кандидата (Data/RecipeShop.lua) временно добавляем его рецепт
+-- в базу профессии, пересчитываем маршрут и сравниваем итоговую стоимость с
+-- базовой. Если экономия больше цены самого рецепта — кандидат предлагается
+-- к покупке. Кандидаты, чей создаваемый предмет уже есть в базе, пропускаются.
+-- Возвращает { {cand, savings, price, source, newTotal}, ... } по убыванию выгоды.
+-- ---------------------------------------------------------------------------
+function P.SuggestRecipes(profKey, fromSkill, toSkill, basePlan)
+    local shop = PR.RecipeShop and PR.RecipeShop[profKey]
+    if not shop then return {} end
+    local prof = PR.Professions[profKey]
+    if not prof then return {} end
+    local base = (basePlan and basePlan.totalCost) or 0
+
+    local out = {}
+    for _, cand in ipairs(shop) do
+        -- рецепт должен быть полезен на участке маршрута
+        if cand.gry > fromSkill and cand.min < toSkill then
+            local known = false
+            for _, r in ipairs(prof.recipes) do
+                if r.item == cand.made then known = true break end
+            end
+            if not known then
+                -- цена самого свитка рецепта
+                local price, source
+                if cand.vendor then
+                    price, source = cand.vendor, "vendor"
+                else
+                    price, source = PR.GetPrice(cand.item)
+                    source = "ah"
+                end
+
+                if price then
+                    local tmp = { item = cand.made, min = cand.min, yel = cand.yel,
+                                  grn = cand.grn, gry = cand.gry,
+                                  reagents = cand.reagents }
+                    table.insert(prof.recipes, tmp)
+                    local newPlan = P.BuildPlan(profKey, fromSkill, toSkill)
+                    table.remove(prof.recipes)
+
+                    if newPlan and newPlan.possible then
+                        local savings = base - newPlan.totalCost
+                        if savings > price then
+                            table.insert(out, {
+                                cand = cand, savings = savings, price = price,
+                                source = source, newTotal = newPlan.totalCost,
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(out, function(a, b) return a.savings > b.savings end)
+    return out
+end
+
+-- ---------------------------------------------------------------------------
 -- Список покупок: агрегируем реагенты по всему маршруту,
 -- вычитаем то, что уже есть в сумках/банке.
 -- Возвращает shopping = { {itemID, need, have, buy, price, subtotal, stale}, ... },

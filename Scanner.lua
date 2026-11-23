@@ -80,6 +80,14 @@ function S.StartForPlan()
             table.insert(ids, row.itemID)
         end
     end
+    if plan and plan.suggestions then
+        -- свитки выгодных рецептов, которые покупаются на аукционе
+        for _, sg in ipairs(plan.suggestions) do
+            if not sg.cand.vendor then
+                table.insert(ids, sg.cand.item)
+            end
+        end
+    end
     for _, r in ipairs(PR.Professions[key].recipes) do
         for _, rg in ipairs(r.reagents) do
             table.insert(ids, rg[1])
