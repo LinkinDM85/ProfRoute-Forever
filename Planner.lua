@@ -132,6 +132,45 @@ function P.BuildPlan(profKey, fromSkill, toSkill)
         s = e + 1
     end
 
+    -- Учитываем реагенты, которые уже лежат в сумках/банке:
+    -- имеющееся покрывает потребности шагов по порядку, цена покрытой
+    -- части считается нулевой. Число крафтов не меняется (оно определяется
+    -- математикой скиллапа) — меняется только ожидаемая стоимость.
+    local owned = {} -- itemID -> остаток имеющегося, ещё не израсходованный
+    plan.totalCost = 0
+    plan.hasUnknown = false
+    for _, step in ipairs(plan.steps) do
+        local r = step.recipe
+        local paidCost, stepUnknown = 0, false
+        for _, rg in ipairs(r.reagents) do
+            local id, perCraft = rg[1], rg[2]
+            local needF = perCraft * step.expectedCrafts
+            local have = owned[id]
+            if have == nil then
+                have = PR.Bags.Count(id)
+                owned[id] = have
+            end
+            local paid = needF
+            if have >= needF then
+                paid = 0
+                owned[id] = have - needF
+            elseif have > 0 then
+                paid = needF - have
+                owned[id] = 0
+            end
+            local price = PR.GetPrice(id)
+            if price then
+                paidCost = paidCost + price * paid
+            elseif paid > 0 then
+                stepUnknown = true
+            end
+        end
+        step.cost = paidCost
+        step.unknown = stepUnknown
+        if stepUnknown then plan.hasUnknown = true end
+        plan.totalCost = plan.totalCost + paidCost
+    end
+
     return plan
 end
 

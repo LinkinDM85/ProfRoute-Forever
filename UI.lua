@@ -753,7 +753,24 @@ local function CreateMainFrame()
     end)
     f:SetFrameStrata("HIGH")
     f:SetClampedToScreen(true)
-    MakePanel(f, C.border)
+
+    -- фон: стандартная «каменная» текстура Blizzard (как у окон игры).
+    -- Под ней — тёмная заливка: если текстуры нет в клиенте, фон всё равно
+    -- останется спокойным и тёмным.
+    local solidBg = f:CreateTexture(nil, "BACKGROUND")
+    solidBg:SetAllPoints()
+    solidBg:SetColorTexture(0.05, 0.055, 0.07, 0.95)
+    EnsureBackdrop(f)
+    f:SetBackdrop({
+        bgFile = "Interface\\FrameGeneral\\UI-Background-Rock",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        tile = true,
+        tileSize = 256,
+    })
+    f:SetBackdropColor(0.62, 0.65, 0.75, 0.92) -- холодная тонировка, без «грязи»
+    f:SetBackdropBorderColor(0.28, 0.30, 0.38, 1)
     f:Hide()
     table.insert(UISpecialFrames, "ProfRouteFrame") -- закрытие по Esc
 
@@ -775,27 +792,39 @@ local function CreateMainFrame()
         insets = { left = 1, right = 1, top = 1, bottom = 1 },
     })
     titleBar:SetBackdropBorderColor(unpack(C.borderDim))
-    AddGradient(titleBar, { 0.13, 0.20, 0.35, 0.9 }, { 0.06, 0.09, 0.16, 0.95 })
+    AddGradient(titleBar, { 0.10, 0.115, 0.15, 0.85 }, { 0.05, 0.06, 0.085, 0.9 })
 
     local titleIcon = titleBar:CreateTexture(nil, "ARTWORK")
     titleIcon:SetSize(22, 22)
     titleIcon:SetPoint("LEFT", 12, 0)
-    titleIcon:SetTexture(136243) -- Trade_Engineering
+    titleIcon:SetTexture(136241) -- Trade_BlackSmithing (наковальня)
 
     local title = MakeText(titleBar, GameFontHighlightLarge)
     title:SetPoint("CENTER", 0, 0)
     title:SetText(L("UI_TITLE"))
 
     local version = MakeText(titleBar, GameFontDisableSmall)
-    version:SetPoint("RIGHT", -64, 0)
+    version:SetPoint("RIGHT", -72, 0)
     version:SetText("|cff8c96b0v" .. PR.VERSION .. "|r")
 
-    local close = MakeButton(titleBar, 26, 22, "✕")
-    close:SetPoint("RIGHT", -6, 0)
+    -- закрытие: стандартная кнопка X из FrameXML Blizzard
+    local close = CreateFrame("Button", nil, titleBar)
+    close:SetSize(26, 26)
+    close:SetPoint("RIGHT", -4, 0)
+    close:SetNormalTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Up")
+    close:SetPushedTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Down")
+    close:SetHighlightTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight", "ADD")
+    close:SetDisabledTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Disabled")
     close:SetScript("OnClick", function() f:Hide() end)
 
-    local gear = MakeButton(titleBar, 26, 22, "⚙")
-    gear:SetPoint("RIGHT", close, "LEFT", -5, 0)
+    -- настройки: стандартная иконка-гаечный ключ (Trade_Engineering)
+    local gear = CreateFrame("Button", nil, titleBar)
+    gear:SetSize(22, 22)
+    gear:SetPoint("RIGHT", close, "LEFT", -6, 0)
+    local gearIcon = gear:CreateTexture(nil, "ARTWORK")
+    gearIcon:SetAllPoints()
+    gearIcon:SetTexture(136243)
+    gear:SetHighlightTexture("Interface\\Icons\\Trade_Engineering", "ADD")
     gear:SetScript("OnClick", function(self) UI.ToggleSettings(self) end)
 
     -- панель управления

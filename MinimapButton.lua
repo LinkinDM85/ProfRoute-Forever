@@ -38,7 +38,7 @@ local function CreateButton()
     local icon = b:CreateTexture(nil, "BACKGROUND")
     icon:SetSize(20, 20)
     icon:SetPoint("CENTER")
-    icon:SetTexture("Interface\\Icons\\Trade_Engineering")
+    icon:SetTexture("Interface\\Icons\\Trade_BlackSmithing")
 
     b:SetScript("OnClick", function(_, btn)
         if btn == "LeftButton" and PR.UI and PR.UI.Toggle then
