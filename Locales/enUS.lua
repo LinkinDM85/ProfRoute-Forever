@@ -51,6 +51,14 @@ PR.Locales.enUS = {
     UI_STATUS_SCANNING = "|cffffd700Scanning auction house: %d/%d...|r",
     UI_HINT = "/proute — open · scanner works at the auction house",
 
+    -- Recipe details / auction
+    UI_REAGENTS = "Reagents",
+    UI_DETAIL_EMPTY = "Click a recipe to see its reagents.",
+    UI_CRAFTS_FMT = "craft ×%d",
+    UI_SCAN_AH_BTN = "ProfRoute: scan",
+    UI_SCAN_BTN_TT = "Scan route reagent prices\n(requires an open auction house)",
+    UI_VENDOR_ITEM = "sold by vendors",
+
     -- Settings
     UI_SETTINGS = "Settings",
     UI_LANGUAGE = "Language",

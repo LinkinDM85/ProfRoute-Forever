@@ -51,6 +51,14 @@ PR.Locales.ruRU = {
     UI_STATUS_SCANNING = "|cffffd700Сканирование аукциона: %d/%d...|r",
     UI_HINT = "/proute — открыть · сканер работает при открытом аукционе",
 
+    -- Детали рецепта / аукцион
+    UI_REAGENTS = "Реагенты",
+    UI_DETAIL_EMPTY = "Нажмите на рецепт, чтобы увидеть реагенты.",
+    UI_CRAFTS_FMT = "создать ×%d",
+    UI_SCAN_AH_BTN = "ProfRoute: скан",
+    UI_SCAN_BTN_TT = "Сканировать цены реагентов маршрута\n(нужно открытое окно аукциона)",
+    UI_VENDOR_ITEM = "продаётся у торговца",
+
     -- Настройки
     UI_SETTINGS = "Настройки",
     UI_LANGUAGE = "Язык",

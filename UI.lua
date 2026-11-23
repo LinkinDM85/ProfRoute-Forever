@@ -1,6 +1,7 @@
 -- ============================================================================
 -- ProfRoute — UI.lua
--- Главное окно: выбор профессии, маршрут прокачки, список покупок.
+-- Главное окно: выбор профессии, маршрут прокачки, список покупок,
+-- детали рецепта по клику.
 -- Открытие: /proute
 -- ============================================================================
 
@@ -14,18 +15,28 @@ local C = PR.COLORS
 -- Локализация: функция-обёртка, чтобы смена языка подхватывалась в рантайме
 local function L(key) return PR.L[key] end
 
-local FRAME_W, FRAME_H = 820, 560
-local ROW_H = 34
+local FRAME_W, FRAME_H = 860, 660
+local ROW_H = 36
+local HEADER_H = 38
+local CTRL_H = 58
+local SECT_H = 20
+local DETAIL_H = 150
+local TOTALS_H = 32
 
 -- ---------------------------------------------------------------------------
--- Хелперы отрисовки
+-- Базовые хелперы отрисовки
 -- ---------------------------------------------------------------------------
 
-local function SetFlatBackdrop(fr, bg, border)
-    -- обычные Frame в современном клиенте не имеют SetBackdrop — подмешиваем
+-- обычные Frame в современном клиенте не имеют SetBackdrop — подмешиваем
+local function EnsureBackdrop(fr)
     if not fr.SetBackdrop and Mixin and BackdropTemplateMixin then
         Mixin(fr, BackdropTemplateMixin)
     end
+end
+
+-- Плоский бэкдроп для мелких виджетов (кнопки, поля, рамки иконок)
+local function SetFlatBackdrop(fr, bg, border)
+    EnsureBackdrop(fr)
     fr:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -36,7 +47,81 @@ local function SetFlatBackdrop(fr, bg, border)
     fr:SetBackdropBorderColor(unpack(border))
 end
 
-local function MakeText(parent, template, size)
+-- Вертикальный градиент поверх существующего фрейма (светлее сверху)
+local function AddGradient(fr, topColor, bottomColor)
+    local g = fr:CreateTexture(nil, "BACKGROUND")
+    g:SetPoint("TOPLEFT", 1, -1)
+    g:SetPoint("BOTTOMRIGHT", -1, 1)
+    local ok = false
+    if CreateColor then
+        ok = pcall(g.SetGradient, g, "VERTICAL",
+            CreateColor(bottomColor[1], bottomColor[2], bottomColor[3], bottomColor[4]),
+            CreateColor(topColor[1], topColor[2], topColor[3], topColor[4]))
+    end
+    if not ok then
+        ok = pcall(function()
+            g:SetGradient("VERTICAL",
+                bottomColor[1], bottomColor[2], bottomColor[3], bottomColor[4],
+                topColor[1], topColor[2], topColor[3], topColor[4])
+        end)
+    end
+    if not ok then
+        g:SetColorTexture(
+            (topColor[1] + bottomColor[1]) / 2,
+            (topColor[2] + bottomColor[2]) / 2,
+            (topColor[3] + bottomColor[3]) / 2,
+            (topColor[4] + bottomColor[4]) / 2)
+    end
+    return g
+end
+
+-- Панель: рамка + тёмный фон + мягкий вертикальный градиент
+local function MakePanel(parent, borderColor)
+    local fr = CreateFrame("Frame", nil, parent)
+    EnsureBackdrop(fr)
+    fr:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    fr:SetBackdropColor(0.015, 0.025, 0.045, 0.92)
+    fr:SetBackdropBorderColor(unpack(borderColor or C.borderDim))
+    AddGradient(fr, { 0.095, 0.125, 0.20, 0.75 }, { 0.045, 0.06, 0.10, 0.85 })
+    return fr
+end
+
+-- Шапка секции («МАРШРУТ», «ЧТО ДОКУПИТЬ»): полоса с акцентной чертой слева
+local function MakeSectionHeader(parent, text)
+    local h = CreateFrame("Frame", nil, parent)
+    h:SetHeight(SECT_H)
+    EnsureBackdrop(h)
+    h:SetBackdrop({
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    h:SetBackdropBorderColor(unpack(C.borderDim))
+    local bg = h:CreateTexture(nil, "BACKGROUND")
+    bg:SetPoint("TOPLEFT", 1, -1)
+    bg:SetPoint("BOTTOMRIGHT", -1, 1)
+    bg:SetColorTexture(0.11, 0.145, 0.225, 0.55)
+
+    local bar = h:CreateTexture(nil, "OVERLAY")
+    bar:SetPoint("TOPLEFT", 1, -4)
+    bar:SetPoint("BOTTOMLEFT", 1, 4)
+    bar:SetWidth(3)
+    bar:SetColorTexture(unpack(C.accent))
+
+    local fs = h:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    fs:SetPoint("LEFT", 10, 0)
+    fs:SetText(text)
+    fs:SetTextColor(0.75, 0.85, 1.0)
+    h.text = fs
+    return h
+end
+
+local function MakeText(parent, template)
     local fs = parent:CreateFontString(nil, "OVERLAY")
     fs:SetFontObject(template or GameFontHighlight)
     fs:SetTextColor(unpack(C.text))
@@ -46,25 +131,26 @@ end
 local function MakeButton(parent, w, h, label, accent)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(w, h)
-    SetFlatBackdrop(b, accent and { 0.15, 0.32, 0.62, 1 } or C.bgLight,
-        accent and C.accent or C.borderDim)
+    local bgColor = accent and { 0.14, 0.30, 0.60, 1 } or C.bgLight
+    local brColor = accent and C.accent or C.borderDim
+    SetFlatBackdrop(b, bgColor, brColor)
+    b.bgColor, b.brColor = bgColor, brColor
     b.text = MakeText(b)
     b.text:SetPoint("CENTER")
     b.text:SetText(label)
     if accent then b.text:SetTextColor(1, 1, 1) end
     b:SetScript("OnEnter", function(self)
-        self:SetBackdropBorderColor(unpack(C.accent))
+        self:SetBackdropBorderColor(1, 0.84, 0.1)
     end)
     b:SetScript("OnLeave", function(self)
-        SetFlatBackdrop(self, accent and { 0.15, 0.32, 0.62, 1 } or C.bgLight,
-            accent and C.accent or C.borderDim)
+        self:SetBackdropBorderColor(unpack(self.brColor))
     end)
     return b
 end
 
 local function MakeEditBox(parent, w, label)
     local wrap = CreateFrame("Frame", nil, parent)
-    wrap:SetSize(w, 22)
+    wrap:SetSize(w, 24)
     SetFlatBackdrop(wrap, { 0.03, 0.04, 0.07, 1 }, C.borderDim)
     local eb = CreateFrame("EditBox", nil, wrap)
     eb:SetPoint("TOPLEFT", 6, -2)
@@ -79,7 +165,7 @@ local function MakeEditBox(parent, w, label)
     eb:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
     if label then
         wrap.label = MakeText(wrap, GameFontDisableSmall)
-        wrap.label:SetPoint("BOTTOMLEFT", wrap, "TOPLEFT", 0, 2)
+        wrap.label:SetPoint("BOTTOMLEFT", wrap, "TOPLEFT", 0, 3)
         wrap.label:SetText(label)
         wrap.label:SetTextColor(unpack(C.textDim))
     end
@@ -92,8 +178,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local function MakeScrollList(parent)
-    local holder = CreateFrame("Frame", nil, parent)
-    SetFlatBackdrop(holder, { 0.03, 0.04, 0.07, 1 }, C.borderDim)
+    local holder = MakePanel(parent, C.borderDim)
 
     local scroll = CreateFrame("ScrollFrame", nil, holder)
     scroll:SetPoint("TOPLEFT", 2, -2)
@@ -105,8 +190,8 @@ local function MakeScrollList(parent)
     -- полоса прокрутки
     local bar = CreateFrame("Slider", nil, holder)
     bar:SetWidth(10)
-    bar:SetPoint("TOPRIGHT", -2, -16)
-    bar:SetPoint("BOTTOMRIGHT", -2, 16)
+    bar:SetPoint("TOPRIGHT", -2, -14)
+    bar:SetPoint("BOTTOMRIGHT", -2, 14)
     bar:SetOrientation("VERTICAL")
     bar:SetMinMaxValues(0, 0)
     bar:SetValueStep(1)
@@ -150,7 +235,7 @@ end
 -- Строки списков
 -- ---------------------------------------------------------------------------
 
-local function AcquireRow(list, i, rightWidth)
+local function AcquireRow(list, i)
     local row = list.rows[i]
     if not row then
         row = CreateFrame("Button", nil, list.content)
@@ -158,56 +243,73 @@ local function AcquireRow(list, i, rightWidth)
         row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
         row:SetPoint("TOPRIGHT", 0, -(i - 1) * ROW_H)
 
+        -- зебра
         row.bg = row:CreateTexture(nil, "BACKGROUND")
         row.bg:SetAllPoints()
         row.bg:SetColorTexture(unpack(i % 2 == 0 and C.bgRowAlt or C.bgRow))
 
+        -- подсветка выбранного шага
+        row.sel = row:CreateTexture(nil, "BORDER")
+        row.sel:SetAllPoints()
+        row.sel:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.16)
+        row.sel:Hide()
+
         row.icon = row:CreateTexture(nil, "ARTWORK")
-        row.icon:SetSize(24, 24)
-        row.icon:SetPoint("LEFT", 6, 0)
+        row.icon:SetSize(26, 26)
+        row.icon:SetPoint("LEFT", 8, 0)
 
         row.iconBorder = CreateFrame("Frame", nil, row)
         row.iconBorder:SetPoint("CENTER", row.icon, "CENTER")
-        row.iconBorder:SetSize(26, 26)
+        row.iconBorder:SetSize(28, 28)
         SetFlatBackdrop(row.iconBorder, { 0, 0, 0, 0 }, C.borderDim)
         row.iconBorder:SetFrameLevel(row:GetFrameLevel() + 1)
 
         row.name = MakeText(row, GameFontHighlight)
-        row.name:SetPoint("TOPLEFT", 40, -4)
+        row.name:SetPoint("TOPLEFT", 46, -5)
+        row.name:SetPoint("RIGHT", -90, 0)
         row.name:SetJustifyH("LEFT")
+        row.name:SetWordWrap(false)
 
         row.sub = MakeText(row, GameFontDisableSmall)
-        row.sub:SetPoint("BOTTOMLEFT", 40, 4)
+        row.sub:SetPoint("BOTTOMLEFT", 46, 5)
+        row.sub:SetPoint("RIGHT", -90, 0)
         row.sub:SetJustifyH("LEFT")
+        row.sub:SetWordWrap(false)
         row.sub:SetTextColor(unpack(C.textDim))
 
         row.right = MakeText(row, GameFontHighlight)
-        row.right:SetPoint("RIGHT", -8, 6)
+        row.right:SetPoint("RIGHT", -10, 6)
         row.right:SetJustifyH("RIGHT")
 
         row.right2 = MakeText(row, GameFontDisableSmall)
-        row.right2:SetPoint("RIGHT", -8, -8)
+        row.right2:SetPoint("RIGHT", -10, -9)
         row.right2:SetJustifyH("RIGHT")
+        row.right2:SetTextColor(unpack(C.textDim))
 
         row.hl = row:CreateTexture(nil, "HIGHLIGHT")
         row.hl:SetAllPoints()
-        row.hl:SetColorTexture(0.3, 0.55, 0.95, 0.12)
+        row.hl:SetColorTexture(1, 1, 1, 0.07)
+
+        -- клик по строке маршрута открывает детали рецепта
+        row:SetScript("OnClick", function(self)
+            if self.step and UI.SelectStep then UI.SelectStep(self.step) end
+        end)
 
         list.rows[i] = row
     end
     return row
 end
 
--- тултип предмета при наведении на строку
-local function HookRowTooltip(row, itemID)
-    row:SetScript("OnEnter", function(self)
+-- тултип предмета при наведении на строку/иконку
+local function HookItemTooltip(fr, itemID)
+    fr:SetScript("OnEnter", function(self)
         if itemID and GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetItemByID(itemID)
             GameTooltip:Show()
         end
     end)
-    row:SetScript("OnLeave", function()
+    fr:SetScript("OnLeave", function()
         if GameTooltip then GameTooltip:Hide() end
     end)
 end
@@ -216,6 +318,8 @@ end
 -- Главное окно
 -- ---------------------------------------------------------------------------
 local f -- главный фрейм
+
+UI.selectedStep = nil -- шаг маршрута, выбранный кликом
 
 function UI.IsShown()
     return f and f:IsShown()
@@ -253,6 +357,17 @@ local function RebuildPlan()
         plan.shopping = {}
     end
 
+    -- выбранный шаг мог исчезнуть из нового плана
+    if UI.selectedStep then
+        local still = false
+        for _, s in ipairs(plan.steps) do
+            if s == UI.selectedStep then still = true break end
+        end
+        if not still then UI.SelectStep(plan.steps[1]) end
+    elseif plan.possible and plan.steps[1] then
+        UI.SelectStep(plan.steps[1])
+    end
+
     UI.RefreshPlan()
     UI.RefreshShopping()
 end
@@ -275,16 +390,16 @@ function UI.RefreshPlan()
         else
             f.planEmpty:SetText(L("UI_PLAN_EMPTY"))
         end
-        f.planTotal:SetText("")
+        f.totalsCost:SetText("")
         return
     end
     f.planEmpty:Hide()
 
-    local W = list.holder:GetWidth() - 16
     for i, step in ipairs(steps) do
         local r = step.recipe
         local row = AcquireRow(list, i)
         row:Show()
+        row.step = step
         row.icon:SetTexture(PR.RecipeIcon(r))
         row.name:SetText(PR.RecipeName(r))
 
@@ -298,15 +413,100 @@ function UI.RefreshPlan()
         row.right2:SetText(string.format(L("UI_PER_ITEM"), PR.FormatMoneyShort(
             PR.Planner.CraftCost(r))))
 
-        if r.item then HookRowTooltip(row, r.item) end
+        row.sel:SetShown(UI.selectedStep == step)
+        if r.item then HookItemTooltip(row, r.item) end
     end
     list.content:SetHeight(#steps * ROW_H)
     list.UpdateScrollRange()
 
-    -- итог
+    -- итоговая стоимость маршрута
     local total = PR.FormatMoney(plan.totalCost)
     local note = plan.hasUnknown and L("UI_UNKNOWN_NOTE") or ""
-    f.planTotal:SetText(L("UI_TOTAL_COST") .. total .. note)
+    f.totalsCost:SetText(L("UI_TOTAL_COST") .. total .. note)
+end
+
+-- ---------------------------------------------------------------------------
+-- Детали рецепта (нижняя панель под маршрутом)
+-- ---------------------------------------------------------------------------
+
+function UI.SelectStep(step)
+    UI.selectedStep = step
+    if not f then return end
+    for _, row in ipairs(f.planList.rows) do
+        row.sel:SetShown(step ~= nil and row.step == step)
+    end
+    UI.RefreshDetail()
+end
+
+function UI.RefreshDetail()
+    if not f then return end
+    local p = f.detail
+    local step = UI.selectedStep
+
+    if not step then
+        p.empty:Show()
+        p.head:Hide()
+        p.info:Hide()
+        p.reagLabel:Hide()
+        for _, chip in ipairs(p.chips) do chip:Hide() end
+        return
+    end
+
+    local r = step.recipe
+    p.empty:Hide()
+    p.head:Show()
+    p.info:Show()
+
+    p.icon:SetTexture(PR.RecipeIcon(r))
+    p.head:SetText(PR.RecipeName(r))
+
+    local col = PR.Planner.DifficultyColor(r, step.from)
+    local costText = PR.FormatMoney(step.cost)
+    if step.unknown then costText = costText .. " |cffff8040*|r" end
+    p.info:SetText(string.format(
+        "|cff%s%d → %d|r  ·  %s  ·  %s",
+        string.format("%02x%02x%02x", col[1] * 255, col[2] * 255, col[3] * 255),
+        step.from, step.to,
+        string.format(L("UI_CRAFTS_FMT"), step.crafts),
+        costText))
+    p.info:SetTextColor(unpack(C.text))
+
+    -- реагенты
+    local reagents = r.reagents or {}
+    p.reagLabel:SetShown(#reagents > 0)
+    for i, chip in ipairs(p.chips) do
+        local rg = reagents[i]
+        if rg then
+            local id, perCraft = rg[1], rg[2]
+            local need = perCraft * step.crafts
+            local have = PR.Bags.Count(id)
+            chip:Show()
+            chip.icon:SetTexture(PR.ItemIcon(id) or 134400)
+            local nm = (C_Item and C_Item.GetItemNameByID)
+                and C_Item.GetItemNameByID(id)
+                or ("#" .. id)
+            chip.name:SetText(nm)
+
+            local unit, src = PR.GetPrice(id)
+            local unitText
+            if src == "vendor" then
+                unitText = "|cff8c96b0" .. L("UI_VENDOR_ITEM") .. "|r"
+            else
+                unitText = PR.FormatMoneyShort(unit)
+            end
+
+            local haveCol = have >= need and "|cff59e673" or "|cffff6a5f"
+            chip.counts:SetText(string.format("×%d  %s%d/%d|r",
+                need, haveCol, have, need) .. "  " .. unitText)
+
+            if chip.itemID ~= id then
+                chip.itemID = id
+                HookItemTooltip(chip, id)
+            end
+        else
+            chip:Hide()
+        end
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -322,7 +522,7 @@ function UI.RefreshShopping()
 
     if #shopping == 0 then
         f.shopEmpty:Show()
-        f.shopTotal:SetText("")
+        f.totalsBuy:SetText("")
         return
     end
     f.shopEmpty:Hide()
@@ -330,34 +530,39 @@ function UI.RefreshShopping()
     for i, it in ipairs(shopping) do
         local row = AcquireRow(list, i)
         row:Show()
+        row.step = nil
+        row.sel:Hide()
 
         row.icon:SetTexture(PR.ItemIcon(it.itemID) or 134400)
 
         local name = C_Item and C_Item.GetItemNameByID
             and C_Item.GetItemNameByID(it.itemID)
-            or ("Предмет #" .. it.itemID)
+            or ("Item #" .. it.itemID)
         row.name:SetText(name)
 
-        if it.buy > 0 then
-            row.sub:SetText(string.format(L("UI_NEED_FMT"), it.need, it.have))
+        row.sub:SetText(string.format(L("UI_NEED_FMT"), it.need, it.have))
+        if it.have >= it.need then
+            row.sub:SetTextColor(unpack(C.green))
+        else
             row.sub:SetTextColor(unpack(C.textDim))
+        end
+
+        if it.buy > 0 then
             row.right:SetText(string.format(L("UI_BUY_FMT"), it.buy))
             local sub = PR.FormatMoney(it.subtotal)
             if it.stale then sub = sub .. L("UI_STALE") end
             row.right2:SetText(sub)
         else
-            row.sub:SetText(string.format(L("UI_NEED_FMT"), it.need, it.have))
-            row.sub:SetTextColor(unpack(C.textDim))
             row.right:SetText(L("UI_HAVE_ENOUGH"))
             row.right2:SetText("")
         end
 
-        HookRowTooltip(row, it.itemID)
+        HookItemTooltip(row, it.itemID)
     end
     list.content:SetHeight(#shopping * ROW_H)
     list.UpdateScrollRange()
 
-    f.shopTotal:SetText(L("UI_TOTAL_BUY") .. PR.FormatMoney(plan.shoppingTotal))
+    f.totalsBuy:SetText(L("UI_TOTAL_BUY") .. PR.FormatMoney(plan.shoppingTotal))
 end
 
 -- ---------------------------------------------------------------------------
@@ -402,30 +607,33 @@ end
 
 local function BuildDropdown(parent)
     dropdown = CreateFrame("Button", nil, parent)
-    dropdown:SetSize(210, 24)
+    dropdown:SetSize(230, 26)
     SetFlatBackdrop(dropdown, C.bgLight, C.borderDim)
     dropdown.text = MakeText(dropdown)
-    dropdown.text:SetPoint("LEFT", 8, 0)
-    dropdown.text:SetPoint("RIGHT", -20, 0)
+    dropdown.text:SetPoint("LEFT", 10, 0)
+    dropdown.text:SetPoint("RIGHT", -24, 0)
     dropdown.text:SetJustifyH("LEFT")
     dropdown.text:SetText(L("UI_SELECT_PROF"))
-    dropdown.arrow = MakeText(dropdown)
-    dropdown.arrow:SetPoint("RIGHT", -6, 0)
+    dropdown.arrow = MakeText(dropdown, GameFontDisableSmall)
+    dropdown.arrow:SetPoint("RIGHT", -8, 0)
     dropdown.arrow:SetText("▼")
     dropdown.arrow:SetTextColor(unpack(C.textDim))
+
+    dropdown:SetScript("OnEnter", function(self) self:SetBackdropBorderColor(unpack(C.accent)) end)
+    dropdown:SetScript("OnLeave", function(self) self:SetBackdropBorderColor(unpack(C.borderDim)) end)
 
     dropdownPopup = CreateFrame("Frame", nil, dropdown)
     dropdownPopup:SetFrameStrata("TOOLTIP")
     dropdownPopup:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
-    dropdownPopup:SetWidth(210)
-    SetFlatBackdrop(dropdownPopup, C.bg, C.borderDim)
+    dropdownPopup:SetWidth(230)
+    SetFlatBackdrop(dropdownPopup, { 0.03, 0.045, 0.08, 0.97 }, C.border)
     dropdownPopup:Hide()
 
     local learned = PR.GetPlayerProfessions()
     local y = -4
     for _, key in ipairs(PR.ProfessionOrder) do
         local btn = CreateFrame("Button", nil, dropdownPopup)
-        btn:SetHeight(24)
+        btn:SetHeight(26)
         btn:SetPoint("TOPLEFT", 4, y)
         btn:SetPoint("TOPRIGHT", -4, y)
         local label = MakeText(btn)
@@ -440,9 +648,9 @@ local function BuildDropdown(parent)
         end
         local hl = btn:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints()
-        hl:SetColorTexture(0.3, 0.55, 0.95, 0.15)
+        hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.15)
         btn:SetScript("OnClick", function() SelectProfession(key) end)
-        y = y - 24
+        y = y - 26
     end
     dropdownPopup:SetHeight(-y + 8)
 
@@ -455,6 +663,80 @@ end
 -- ---------------------------------------------------------------------------
 -- Построение главного окна
 -- ---------------------------------------------------------------------------
+
+local LEFT_X = 12
+local COL_W = FRAME_W / 2 - 26   -- ширина одной колонки
+local RIGHT_X = FRAME_W / 2 + 6
+
+local function BuildDetailPanel(parent)
+    local p = MakePanel(parent, C.borderDim)
+
+    p.icon = p:CreateTexture(nil, "ARTWORK")
+    p.icon:SetSize(40, 40)
+    p.icon:SetPoint("TOPLEFT", 12, -14)
+
+    p.iconBorder = CreateFrame("Frame", nil, p)
+    p.iconBorder:SetPoint("CENTER", p.icon, "CENTER")
+    p.iconBorder:SetSize(42, 42)
+    SetFlatBackdrop(p.iconBorder, { 0, 0, 0, 0 }, C.borderDim)
+
+    p.head = MakeText(p, GameFontHighlight)
+    p.head:SetPoint("TOPLEFT", 64, -12)
+    p.head:SetPoint("RIGHT", -12, 0)
+    p.head:SetJustifyH("LEFT")
+    p.head:SetWordWrap(false)
+
+    p.info = MakeText(p, GameFontDisableSmall)
+    p.info:SetPoint("TOPLEFT", 64, -32)
+    p.info:SetPoint("RIGHT", -12, 0)
+    p.info:SetJustifyH("LEFT")
+    p.info:SetWordWrap(false)
+    p.info:SetTextColor(unpack(C.textDim))
+
+    p.empty = MakeText(p, GameFontDisableSmall)
+    p.empty:SetPoint("CENTER")
+    p.empty:SetWidth(COL_W - 40)
+    p.empty:SetText(L("UI_DETAIL_EMPTY"))
+    p.empty:SetTextColor(unpack(C.textDim))
+
+    p.reagLabel = MakeText(p, GameFontDisableSmall)
+    p.reagLabel:SetPoint("BOTTOMLEFT", 12, 8)
+    p.reagLabel:SetText(L("UI_REAGENTS"))
+    p.reagLabel:SetTextColor(0.75, 0.85, 1.0)
+
+    -- до 4 реагентов: сетка 2×2 (в базе максимум 3 на рецепт)
+    p.chips = {}
+    for i = 1, 4 do
+        local chip = CreateFrame("Button", nil, p)
+        chip:SetSize(152, 24)
+        local col = (i - 1) % 2
+        local rowN = math.floor((i - 1) / 2)
+        chip:SetPoint("BOTTOMLEFT", 84 + col * 156, 40 - rowN * 24)
+        chip.itemID = nil
+
+        chip.icon = chip:CreateTexture(nil, "ARTWORK")
+        chip.icon:SetSize(18, 18)
+        chip.icon:SetPoint("LEFT", 0, 0)
+
+        chip.name = MakeText(chip, GameFontDisableSmall)
+        chip.name:SetPoint("TOPLEFT", 24, 0)
+        chip.name:SetPoint("RIGHT", 0, 0)
+        chip.name:SetJustifyH("LEFT")
+        chip.name:SetWordWrap(false)
+        chip.name:SetTextColor(unpack(C.text))
+
+        chip.counts = MakeText(chip, GameFontDisableSmall)
+        chip.counts:SetPoint("TOPLEFT", 24, -11)
+        chip.counts:SetPoint("RIGHT", 0, -11)
+        chip.counts:SetJustifyH("LEFT")
+        chip.counts:SetWordWrap(false)
+        chip.counts:SetTextColor(unpack(C.textDim))
+
+        table.insert(p.chips, chip)
+    end
+
+    return p
+end
 
 local function CreateMainFrame()
     f = CreateFrame("Frame", "ProfRouteFrame", UIParent)
@@ -471,7 +753,7 @@ local function CreateMainFrame()
     end)
     f:SetFrameStrata("HIGH")
     f:SetClampedToScreen(true)
-    SetFlatBackdrop(f, C.bg, C.border)
+    MakePanel(f, C.border)
     f:Hide()
     table.insert(UISpecialFrames, "ProfRouteFrame") -- закрытие по Esc
 
@@ -485,98 +767,140 @@ local function CreateMainFrame()
     local titleBar = CreateFrame("Frame", nil, f)
     titleBar:SetPoint("TOPLEFT", 1, -1)
     titleBar:SetPoint("TOPRIGHT", -1, -1)
-    titleBar:SetHeight(34)
-    SetFlatBackdrop(titleBar, { 0.07, 0.10, 0.16, 1 }, C.borderDim)
+    titleBar:SetHeight(HEADER_H)
+    EnsureBackdrop(titleBar)
+    titleBar:SetBackdrop({
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    titleBar:SetBackdropBorderColor(unpack(C.borderDim))
+    AddGradient(titleBar, { 0.13, 0.20, 0.35, 0.9 }, { 0.06, 0.09, 0.16, 0.95 })
+
+    local titleIcon = titleBar:CreateTexture(nil, "ARTWORK")
+    titleIcon:SetSize(22, 22)
+    titleIcon:SetPoint("LEFT", 12, 0)
+    titleIcon:SetTexture(136243) -- Trade_Engineering
 
     local title = MakeText(titleBar, GameFontHighlightLarge)
-    title:SetPoint("LEFT", 12, 0)
+    title:SetPoint("CENTER", 0, 0)
     title:SetText(L("UI_TITLE"))
 
-    local close = MakeButton(titleBar, 24, 20, "✕")
+    local version = MakeText(titleBar, GameFontDisableSmall)
+    version:SetPoint("RIGHT", -64, 0)
+    version:SetText("|cff8c96b0v" .. PR.VERSION .. "|r")
+
+    local close = MakeButton(titleBar, 26, 22, "✕")
     close:SetPoint("RIGHT", -6, 0)
     close:SetScript("OnClick", function() f:Hide() end)
 
-    local gear = MakeButton(titleBar, 24, 20, "⚙")
-    gear:SetPoint("RIGHT", close, "LEFT", -4, 0)
+    local gear = MakeButton(titleBar, 26, 22, "⚙")
+    gear:SetPoint("RIGHT", close, "LEFT", -5, 0)
     gear:SetScript("OnClick", function(self) UI.ToggleSettings(self) end)
 
     -- панель управления
     local ctrl = CreateFrame("Frame", nil, f)
     ctrl:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 0, -6)
     ctrl:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT", 0, -6)
-    ctrl:SetHeight(52)
+    ctrl:SetHeight(CTRL_H)
 
     local ddLabel = MakeText(ctrl, GameFontDisableSmall)
-    ddLabel:SetPoint("TOPLEFT", 12, 0)
+    ddLabel:SetPoint("TOPLEFT", LEFT_X, -2)
     ddLabel:SetText(L("UI_PROFESSION"))
     ddLabel:SetTextColor(unpack(C.textDim))
 
     local dd = BuildDropdown(ctrl)
-    dd:SetPoint("TOPLEFT", 12, -14)
+    dd:SetPoint("TOPLEFT", LEFT_X, -18)
 
-    local skillWrap, skillBox = MakeEditBox(ctrl, 60, L("UI_CURRENT_SKILL"))
-    skillWrap:SetPoint("LEFT", dd, "RIGHT", 18, 0)
+    local skillWrap, skillBox = MakeEditBox(ctrl, 64, L("UI_CURRENT_SKILL"))
+    skillWrap:SetPoint("LEFT", dd, "RIGHT", 20, 0)
     f.skillBox = skillBox
 
-    local tgtWrap, tgtBox = MakeEditBox(ctrl, 60, L("UI_TARGET"))
-    tgtWrap:SetPoint("LEFT", skillWrap, "RIGHT", 18, 0)
+    local tgtWrap, tgtBox = MakeEditBox(ctrl, 64, L("UI_TARGET"))
+    tgtWrap:SetPoint("LEFT", skillWrap, "RIGHT", 20, 0)
     f.targetBox = tgtBox
     tgtBox:SetText(tostring(PR.db.targetSkill or 300))
 
-    local build = MakeButton(ctrl, 130, 24, L("UI_BUILD"), true)
-    build:SetPoint("LEFT", tgtWrap, "RIGHT", 18, 0)
+    local build = MakeButton(ctrl, 140, 26, L("UI_BUILD"), true)
+    build:SetPoint("LEFT", tgtWrap, "RIGHT", 20, 0)
     build:SetScript("OnClick", RebuildPlan)
 
-    local scan = MakeButton(ctrl, 150, 24, L("UI_SCAN"))
+    local scan = MakeButton(ctrl, 160, 26, L("UI_SCAN"))
     scan:SetPoint("LEFT", build, "RIGHT", 12, 0)
     scan:SetScript("OnClick", function() PR.Scanner.StartForPlan() end)
     f.scanButton = scan
 
-    -- левая панель: маршрут
-    local leftHeader = MakeText(f, GameFontHighlight)
-    leftHeader:SetPoint("TOPLEFT", ctrl, "BOTTOMLEFT", 12, -10)
-    leftHeader:SetText(L("UI_ROUTE"))
-    leftHeader:SetTextColor(unpack(C.accent))
+    -- левая колонка: маршрут
+    local leftHeader = MakeSectionHeader(f, L("UI_ROUTE"))
+    leftHeader:SetPoint("TOPLEFT", LEFT_X, -(HEADER_H + 6 + CTRL_H + 8))
+    leftHeader:SetWidth(COL_W)
+
+    f.detail = BuildDetailPanel(f)
+    f.detail:SetPoint("BOTTOMLEFT", LEFT_X, TOTALS_H + 30)
+    f.detail:SetSize(COL_W, DETAIL_H)
 
     f.planList = MakeScrollList(f)
     f.planList.holder:SetPoint("TOPLEFT", leftHeader, "BOTTOMLEFT", 0, -4)
-    f.planList.holder:SetSize(FRAME_W / 2 - 20, FRAME_H - 170)
+    f.planList.holder:SetPoint("BOTTOMRIGHT", f.detail, "TOPRIGHT", 0, -6)
 
     f.planEmpty = MakeText(f.planList.holder)
     f.planEmpty:SetPoint("CENTER")
-    f.planEmpty:SetWidth(FRAME_W / 2 - 60)
+    f.planEmpty:SetWidth(COL_W - 60)
     f.planEmpty:SetTextColor(unpack(C.textDim))
 
-    f.planTotal = MakeText(f, GameFontHighlight)
-    f.planTotal:SetPoint("TOPLEFT", f.planList.holder, "BOTTOMLEFT", 4, -6)
-
-    -- правая панель: список покупок
-    local rightHeader = MakeText(f, GameFontHighlight)
-    rightHeader:SetPoint("TOPLEFT", f, "TOPLEFT", FRAME_W / 2 + 8, 0)
-    rightHeader:SetPoint("TOP", leftHeader, "TOP", 0, 0)
-    rightHeader:SetText(L("UI_SHOPPING"))
-    rightHeader:SetTextColor(unpack(C.accent))
+    -- правая колонка: список покупок
+    local rightHeader = MakeSectionHeader(f, L("UI_SHOPPING"))
+    rightHeader:SetPoint("TOPLEFT", RIGHT_X, -(HEADER_H + 6 + CTRL_H + 8))
+    rightHeader:SetWidth(COL_W)
 
     f.shopList = MakeScrollList(f)
     f.shopList.holder:SetPoint("TOPLEFT", rightHeader, "BOTTOMLEFT", 0, -4)
-    f.shopList.holder:SetSize(FRAME_W / 2 - 20, FRAME_H - 170)
+    f.shopList.holder:SetPoint("TOPRIGHT", rightHeader, "BOTTOMRIGHT", 0, -4)
+    f.shopList.holder:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -LEFT_X, TOTALS_H + 30)
 
     f.shopEmpty = MakeText(f.shopList.holder)
     f.shopEmpty:SetPoint("CENTER")
-    f.shopEmpty:SetWidth(FRAME_W / 2 - 60)
+    f.shopEmpty:SetWidth(COL_W - 60)
     f.shopEmpty:SetText(L("UI_SHOP_EMPTY"))
     f.shopEmpty:SetTextColor(unpack(C.textDim))
 
-    f.shopTotal = MakeText(f, GameFontHighlight)
-    f.shopTotal:SetPoint("TOPLEFT", f.shopList.holder, "BOTTOMLEFT", 4, -6)
-    f.shopTotal:SetTextColor(unpack(C.gold))
+    -- панель итогов над статусной строкой
+    local totalsBar = MakePanel(f, C.borderDim)
+    totalsBar:SetPoint("BOTTOMLEFT", 10, 26)
+    totalsBar:SetPoint("BOTTOMRIGHT", -10, 26)
+    totalsBar:SetHeight(TOTALS_H)
+
+    local totalsIcon = totalsBar:CreateTexture(nil, "ARTWORK")
+    totalsIcon:SetSize(16, 16)
+    totalsIcon:SetPoint("LEFT", 10, 0)
+    totalsIcon:SetTexture(133784) -- inv_misc_coin_01
+
+    f.totalsCost = MakeText(totalsBar, GameFontHighlight)
+    f.totalsCost:SetPoint("LEFT", 32, 0)
+    f.totalsCost:SetPoint("RIGHT", totalsBar, "CENTER", -10, 0)
+    f.totalsCost:SetJustifyH("LEFT")
+
+    f.totalsBuy = MakeText(totalsBar, GameFontHighlightLarge)
+    f.totalsBuy:SetPoint("RIGHT", -12, 0)
+    f.totalsBuy:SetJustifyH("RIGHT")
+    f.totalsBuy:SetTextColor(unpack(C.gold))
 
     -- статусная строка
     local statusBar = CreateFrame("Frame", nil, f)
     statusBar:SetPoint("BOTTOMLEFT", 1, 1)
     statusBar:SetPoint("BOTTOMRIGHT", -1, 1)
-    statusBar:SetHeight(24)
-    SetFlatBackdrop(statusBar, { 0.07, 0.10, 0.16, 1 }, C.borderDim)
+    statusBar:SetHeight(22)
+    EnsureBackdrop(statusBar)
+    statusBar:SetBackdrop({
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    statusBar:SetBackdropBorderColor(unpack(C.borderDim))
+    local statusBg = statusBar:CreateTexture(nil, "BACKGROUND")
+    statusBg:SetPoint("TOPLEFT", 1, -1)
+    statusBg:SetPoint("BOTTOMRIGHT", -1, 1)
+    statusBg:SetColorTexture(0.05, 0.07, 0.11, 0.9)
 
     f.status = MakeText(statusBar, GameFontDisableSmall)
     f.status:SetPoint("LEFT", 10, 0)
@@ -586,12 +910,13 @@ local function CreateMainFrame()
     hint:SetText(L("UI_HINT"))
     hint:SetTextColor(unpack(C.textDim))
 
-    -- отслеживаем изменения в сумках: обновляем "есть/купить"
+    -- отслеживаем изменения в сумках: обновляем «есть/купить» и детали
     PR.Bags.Watch(function()
         if PR.state.plan and PR.state.plan.possible then
             PR.state.plan.shopping, PR.state.plan.shoppingTotal =
                 PR.Planner.BuildShoppingList(PR.state.plan)
             UI.RefreshShopping()
+            UI.RefreshDetail()
         end
     end)
 
@@ -621,14 +946,14 @@ end
 
 local function BuildSettingsPopup()
     local p = CreateFrame("Frame", nil, f)
-    p:SetSize(280, 170)
+    p:SetSize(290, 175)
     p:SetFrameStrata("TOOLTIP")
-    SetFlatBackdrop(p, C.bg, C.border)
+    SetFlatBackdrop(p, { 0.03, 0.045, 0.08, 0.97 }, C.border)
 
     local title = MakeText(p, GameFontHighlight)
     title:SetPoint("TOPLEFT", 12, -10)
     title:SetText(L("UI_SETTINGS"))
-    title:SetTextColor(unpack(C.accent))
+    title:SetTextColor(0.75, 0.85, 1.0)
 
     local langLabel = MakeText(p, GameFontDisableSmall)
     langLabel:SetPoint("TOPLEFT", 12, -34)
@@ -644,19 +969,19 @@ local function BuildSettingsPopup()
     }
     local x = 12
     for _, entry in ipairs(langs) do
-        local b = MakeButton(p, 84, 22, entry.label)
+        local b = MakeButton(p, 86, 22, entry.label)
         b:SetPoint("TOPLEFT", x, -52)
         b:SetScript("OnClick", function() ApplyLocale(entry.value) end)
         b.langValue = entry.value
         b.langLabel = entry.label
         table.insert(p.langButtons, b)
-        x = x + 88
+        x = x + 90
     end
 
     -- чекбокс «учитывать банк»
     local cb = CreateFrame("Button", nil, p)
     cb:SetSize(18, 18)
-    cb:SetPoint("TOPLEFT", 12, -92)
+    cb:SetPoint("TOPLEFT", 12, -94)
     SetFlatBackdrop(cb, C.bgLight, C.borderDim)
     cb.mark = MakeText(cb)
     cb.mark:SetPoint("CENTER")

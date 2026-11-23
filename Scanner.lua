@@ -191,7 +191,90 @@ for _, event in ipairs({
 }) do
     pcall(ev.RegisterEvent, ev, event)
 end
+-- обработчик событий назначен ниже, в разделе кнопки на окне аукциона
+-- (один OnEvent на все события сканера)
+
+-- тикер очереди: учитываем серверное ограничение частоты запросов
+C_Timer.NewTicker(INTERVAL, function()
+    if not S.active or S.waiting then return end
+    if not AtAuctionHouse() then return end
+    if C_AuctionHouse.IsThrottledMessageSystemReady
+        and not C_AuctionHouse.IsThrottledMessageSystemReady() then
+        return
+    end
+    SendNext()
+end)
+
+-- ---------------------------------------------------------------------------
+-- Кнопка сканирования на окне аукциона
+-- ---------------------------------------------------------------------------
+-- Кнопка привязывается к фрейму аукциона, поэтому показывается и прячется
+-- вместе с ним. Создаём лениво: фрейм аукциона может ещё не существовать
+-- на момент загрузки аддона.
+
+local ahButton
+
+local function EnsureAHButton()
+    if ahButton then return true end
+    local ah = _G.AuctionHouseFrame or _G.AuctionFrame
+    if not ah then return false end
+
+    local b = CreateFrame("Button", "ProfRouteAHScanButton", ah)
+    b:SetSize(128, 24)
+    -- под верхней панелью аукциона; если якорь не подошёл — pcall попробует
+    -- запасной вариант чуть ниже
+    local ok = pcall(b.SetPoint, b, "TOP", ah, "TOP", 0, -34)
+    if not ok then pcall(b.SetPoint, b, "TOPRIGHT", ah, "TOPRIGHT", -60, -60) end
+
+    if not b.SetBackdrop and Mixin and BackdropTemplateMixin then
+        Mixin(b, BackdropTemplateMixin)
+    end
+    b:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    b:SetBackdropColor(0.09, 0.12, 0.19, 0.95)
+    b:SetBackdropBorderColor(unpack(PR.COLORS.accent))
+
+    b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    b.text:SetPoint("CENTER")
+    b.text:SetText(PR.L("UI_SCAN_AH_BTN"))
+
+    b:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(1, 0.84, 0.1)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(PR.L("UI_SCAN_BTN_TT"), 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end
+    end)
+    b:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(unpack(PR.COLORS.accent))
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    b:SetScript("OnClick", function()
+        PR.Scanner.StartForPlan()
+        -- если план ещё не построен — открываем окно, чтобы было что сканировать
+        if not (PR.state and PR.state.profession)
+            and PR.UI and PR.UI.Toggle then
+            PR.UI.Toggle()
+        end
+    end)
+
+    ahButton = b
+    return true
+end
+
+-- пробуем создать кнопку при логине и при каждом событии аукциона —
+-- одно из событий в конкретном билде Forever наверняка наступит
+pcall(ev.RegisterEvent, ev, "PLAYER_LOGIN")
+pcall(ev.RegisterEvent, ev, "AUCTION_HOUSE_SHOW")
 ev:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_LOGIN" or event == "AUCTION_HOUSE_SHOW" then
+        EnsureAHButton()
+    end
     if event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"
         or event == "AUCTION_HOUSE_BROWSE_RESULTS_ADDED" then
         OnBrowseResults()
@@ -205,15 +288,4 @@ ev:SetScript("OnEvent", function(_, event)
             PR.Print(PR.L("SCAN_ABORTED"))
         end
     end
-end)
-
--- тикер очереди: учитываем серверное ограничение частоты запросов
-C_Timer.NewTicker(INTERVAL, function()
-    if not S.active or S.waiting then return end
-    if not AtAuctionHouse() then return end
-    if C_AuctionHouse.IsThrottledMessageSystemReady
-        and not C_AuctionHouse.IsThrottledMessageSystemReady() then
-        return
-    end
-    SendNext()
 end)
