@@ -1,0 +1,26 @@
+# Автосборка релизов: при каждом git-теге вида v1.2.3 action собирает ZIP
+# и публикует его на CurseForge и в GitHub Releases.
+# Требуется один раз настроить секрет CF_API_KEY:
+# репозиторий → Settings → Secrets and variables → Actions → New repository secret.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone project
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Package and publish
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
