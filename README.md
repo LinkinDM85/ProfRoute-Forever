@@ -76,6 +76,28 @@
 Баг, неточный рецепт или идея по улучшению — открывайте issue:
 https://github.com/LinkinDM85/ProfRoute-Forever/issues
 
+## Релизы и публикация
+
+Релизы собираются автоматически через GitHub Action
+([BigWigsMods/packager](https://github.com/BigWigsMods/packager)). Чтобы выпустить
+новую версию:
+
+```bash
+git tag v1.1.2
+git push origin main --tags
+```
+
+При появлении тега `v*` action автоматически:
+- соберёт zip-пакет аддона,
+- загрузит его на **CurseForge** (проект: `X-Curse-Project-ID: 1824284`),
+- создаст GitHub Release с архивом.
+
+**Требуется однократная настройка:** GitHub → репозиторий → **Settings →
+Secrets and variables → Actions** → **New repository secret** с именем
+`CF_API_KEY` и ключом из CurseForge (личный кабинет → API Tokens → Generate).
+
+Первый релиз можно проверить вручную: `git tag v1.1.1 && git push origin v1.1.1`.
+
 ## Поддержать проект
 
 Если аддон сэкономил тебе время и золото — можно отблагодарить донатом:
