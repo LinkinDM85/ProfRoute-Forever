@@ -221,10 +221,19 @@ local function EnsureAHButton()
 
     local b = CreateFrame("Button", "ProfRouteAHScanButton", ah)
     b:SetSize(128, 24)
-    -- под верхней панелью аукциона; если якорь не подошёл — pcall попробует
-    -- запасной вариант чуть ниже
-    local ok = pcall(b.SetPoint, b, "TOP", ah, "TOP", 0, -34)
-    if not ok then pcall(b.SetPoint, b, "TOPRIGHT", ah, "TOPRIGHT", -60, -60) end
+    -- в правом верхнем углу, слева от кнопки закрытия — там всегда свободно;
+    -- строка поиска товаров находится ниже и кнопку больше не перекрывает
+    local ok
+    local closeBtn = ah.GetName and ah:GetName() and _G[ah:GetName() .. "CloseButton"]
+    if closeBtn then
+        ok = pcall(b.SetPoint, b, "RIGHT", closeBtn, "LEFT", -6, 0)
+    end
+    if not ok then
+        ok = pcall(b.SetPoint, b, "TOPRIGHT", ah, "TOPRIGHT", -40, -8)
+    end
+    if not ok then
+        pcall(b.SetPoint, b, "TOP", ah, "TOP", 0, -34)
+    end
 
     if not b.SetBackdrop and Mixin and BackdropTemplateMixin then
         Mixin(b, BackdropTemplateMixin)
@@ -287,5 +296,126 @@ ev:SetScript("OnEvent", function(_, event)
             S.queue = {}
             PR.Print(PR.L("SCAN_ABORTED"))
         end
+        if S.searchActive then
+            S.searchActive = false
+            S.searchQueue = nil
+        end
     end
 end)
+
+-- ---------------------------------------------------------------------------
+-- Поиск покупок на аукционе
+-- ---------------------------------------------------------------------------
+-- Одна кнопка в окне аддона -> аддон по очереди подставляет в строку поиска
+-- аукциона каждый предмет из списка покупок. Покупать всё равно приходится
+-- вручную (автоматизация запрещена правилами Blizzard), но листинги нужных
+-- товаров разворачиваются сами.
+
+S.searchActive = false
+S.searchQueue = nil -- { {itemID, name, count}, ... }
+S.searchIdx = 0
+
+local SEARCH_STEP_DELAY = 2.0 -- пауза между подстановками, сек.
+
+-- Подставить текст в строку поиска открытого окна аукциона и запустить поиск.
+-- Поддерживает классический (AuctionFrame) и современный (AuctionHouseFrame)
+-- интерфейсы. Возвращает true, если поиск удалось запустить.
+local function SetAHSearch(text)
+    if not text or text == "" then return false end
+
+    -- классический интерфейс ( Forever / classic )
+    local af = _G.AuctionFrame
+    if af and af:IsShown() and _G.BrowseName then
+        _G.BrowseName:SetText(text)
+        if _G.AuctionFrameBrowse_Search then
+            pcall(_G.AuctionFrameBrowse_Search)
+        end
+        return true
+    end
+
+    -- современный интерфейс
+    local ah = _G.AuctionHouseFrame
+    if ah and ah:IsShown() and ah.SearchBar and ah.SearchBar.SearchBox then
+        ah.SearchBar.SearchBox:SetText(text)
+        if ah.SearchBar.StartSearch then
+            pcall(function() ah.SearchBar:StartSearch() end)
+        end
+        return true
+    end
+
+    return false
+end
+
+local function NextSearchStep()
+    if not S.searchActive then return end
+    if not AtAuctionHouse() then
+        S.searchActive = false
+        S.searchQueue = nil
+        if PR.UI and PR.UI.RefreshScanStatus then PR.UI.RefreshScanStatus() end
+        return
+    end
+
+    S.searchIdx = S.searchIdx + 1
+    local entry = S.searchQueue[S.searchIdx]
+    if not entry then
+        S.searchActive = false
+        S.searchQueue = nil
+        PR.Print(PR.L("UI_SEARCH_DONE"), S.searchIdx - 1)
+        if PR.UI and PR.UI.RefreshScanStatus then PR.UI.RefreshScanStatus() end
+        return
+    end
+
+    SetAHSearch(entry.name)
+    if PR.UI and PR.UI.RefreshScanStatus then PR.UI.RefreshScanStatus() end
+    C_Timer.After(SEARCH_STEP_DELAY, NextSearchStep)
+end
+
+-- Запустить обход списка покупок: каждая позиция с buy > 0 будет
+-- последовательно искаться на аукционе.
+function S.SearchShoppingOnAH()
+    if not S.IsSupported() then
+        PR.Print(PR.L("SCAN_NO_SUPPORT"))
+        return
+    end
+    if not AtAuctionHouse() then
+        PR.Print(PR.L("SCAN_OPEN_AH"))
+        return
+    end
+
+    local plan = PR.state.plan
+    if not (plan and plan.shopping and #plan.shopping > 0) then
+        PR.Print(PR.L("UI_NOTHING_TO_BUY"))
+        return
+    end
+
+    local q = {}
+    for _, it in ipairs(plan.shopping) do
+        if it.buy > 0 then
+            local nm = (C_Item and C_Item.GetItemNameByID)
+                and C_Item.GetItemNameByID(it.itemID)
+            if nm and nm ~= "" then
+                table.insert(q, { itemID = it.itemID, name = nm, count = it.buy })
+            end
+        end
+    end
+
+    if #q == 0 then
+        PR.Print(PR.L("UI_NOTHING_TO_BUY"))
+        return
+    end
+
+    S.searchQueue = q
+    S.searchIdx = 0
+    S.searchActive = true
+    NextSearchStep()
+end
+
+-- Поиск одного предмета (Shift+клик по строке в окне аддона).
+-- Возвращает true, если поиск был запущен.
+function S.SearchItemOnAH(itemID)
+    if not itemID or not AtAuctionHouse() then return false end
+    local nm = (C_Item and C_Item.GetItemNameByID)
+        and C_Item.GetItemNameByID(itemID)
+    if not nm or nm == "" then return false end
+    return SetAHSearch(nm)
+end

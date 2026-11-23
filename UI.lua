@@ -290,8 +290,13 @@ local function AcquireRow(list, i)
         row.hl:SetAllPoints()
         row.hl:SetColorTexture(1, 1, 1, 0.07)
 
-        -- клик по строке маршрута открывает детали рецепта
+        -- клик: выбор шага / Shift+клик: поиск предмета на аукционе
         row:SetScript("OnClick", function(self)
+            if IsShiftKeyDown() and self.itemID
+                and PR.Scanner and PR.Scanner.SearchItemOnAH
+                and PR.Scanner.SearchItemOnAH(self.itemID) then
+                return
+            end
             if self.step and UI.SelectStep then UI.SelectStep(self.step) end
         end)
 
@@ -400,6 +405,7 @@ function UI.RefreshPlan()
         local row = AcquireRow(list, i)
         row:Show()
         row.step = step
+        row.itemID = r.item -- Shift+клик: искать результат рецепта на аукционе
         row.icon:SetTexture(PR.RecipeIcon(r))
         row.name:SetText(PR.RecipeName(r))
 
@@ -531,6 +537,7 @@ function UI.RefreshShopping()
         local row = AcquireRow(list, i)
         row:Show()
         row.step = nil
+        row.itemID = it.itemID -- Shift+клик: искать на аукционе
         row.sel:Hide()
 
         row.icon:SetTexture(PR.ItemIcon(it.itemID) or 134400)
@@ -572,7 +579,15 @@ end
 function UI.RefreshScanStatus()
     if not f or not f:IsShown() then return end
     local S = PR.Scanner
-    if S.active then
+    if S.searchActive and S.searchQueue then
+        local cur = S.searchQueue[S.searchIdx]
+        if cur then
+            f.status:SetText(string.format(L("UI_SEARCHING_FMT"),
+                cur.name, S.searchIdx, #S.searchQueue))
+        else
+            f.status:SetText("")
+        end
+    elseif S.active then
         f.status:SetText(string.format(L("UI_STATUS_SCANNING"), S.done, S.total))
     else
         f.status:SetText(string.format(L("UI_STATUS_SOURCE"), PR.PriceSourceLabel()))
@@ -881,6 +896,11 @@ local function CreateMainFrame()
     local rightHeader = MakeSectionHeader(f, L("UI_SHOPPING"))
     rightHeader:SetPoint("TOPLEFT", RIGHT_X, -(HEADER_H + 6 + CTRL_H + 8))
     rightHeader:SetWidth(COL_W)
+
+    -- кнопка «Найти на аукционе»: по очереди ищет все позиции списка покупок
+    local findBtn = MakeButton(rightHeader, 158, SECT_H + 2, L("UI_FIND_BUYS"))
+    findBtn:SetPoint("RIGHT", rightHeader, "RIGHT", -4, 0)
+    findBtn:SetScript("OnClick", function() PR.Scanner.SearchShoppingOnAH() end)
 
     f.shopList = MakeScrollList(f)
     f.shopList.holder:SetPoint("TOPLEFT", rightHeader, "BOTTOMLEFT", 0, -4)

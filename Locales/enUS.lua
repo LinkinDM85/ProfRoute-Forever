@@ -58,6 +58,10 @@ PR.Locales.enUS = {
     UI_SCAN_AH_BTN = "ProfRoute: scan",
     UI_SCAN_BTN_TT = "Scan route reagent prices\n(requires an open auction house)",
     UI_VENDOR_ITEM = "sold by vendors",
+    UI_FIND_BUYS = "Find on AH",
+    UI_SEARCHING_FMT = "Searching auction house: |cffffffff%s|r (%d/%d)...",
+    UI_SEARCH_DONE = "auction search finished, items shown: %d.",
+    UI_NOTHING_TO_BUY = "nothing to buy — you already have everything you need.",
 
     -- Settings
     UI_SETTINGS = "Settings",

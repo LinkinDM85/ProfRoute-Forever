@@ -58,6 +58,10 @@ PR.Locales.ruRU = {
     UI_SCAN_AH_BTN = "ProfRoute: скан",
     UI_SCAN_BTN_TT = "Сканировать цены реагентов маршрута\n(нужно открытое окно аукциона)",
     UI_VENDOR_ITEM = "продаётся у торговца",
+    UI_FIND_BUYS = "Найти на аукционе",
+    UI_SEARCHING_FMT = "Поиск на аукционе: |cffffffff%s|r (%d/%d)...",
+    UI_SEARCH_DONE = "поиск на аукционе завершён, показано позиций: %d.",
+    UI_NOTHING_TO_BUY = "покупать нечего — всё нужное уже есть в сумках.",
 
     -- Настройки
     UI_SETTINGS = "Настройки",
